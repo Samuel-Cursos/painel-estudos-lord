@@ -2,8 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
-import { Lesson, lessons, projectRoadmap, SubjectId, subjects, weeklyPlan } from "./course-data";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { Lesson, lessons, subjects } from "./course-data";
 import { enemData, EnemLevel, EnemSkill, EnemSubjectId } from "./enem-data";
 import { firebaseAuth, firestore, googleProvider } from "./firebase-client";
 import QuestionBank, { QuestionFocus, QuestionProgressMap } from "./question-bank";
@@ -12,44 +12,24 @@ import AdminPanel from "./admin-panel";
 import MasteryCheck from "./mastery-check";
 import { lessonMastery, skillMasteryQuestion } from "./mastery-data";
 import { defaultAppSettings, isOwner, type AppSettings } from "./access-control";
-import SchoolCurriculum from "./school-curriculum";
-import StudentProfileSetup from "./student-profile-setup";
-import { isHighSchool, schoolSubjectMeta, schoolYears, subjectsForYear, topicsFor, yearLabel, type SchoolYear } from "./school-data";
-import StudentLobby, { type RegistrationDraft } from "./student-lobby";
-import { currentAcademicYear, currentSchoolYear, isCompleteStudentProfile, normalizeRa, type StudentProfile } from "./student-profile";
-import { type SchoolLesson, type SchoolLessonProgress } from "./school-lesson-data";
+import StudentLobby from "./student-lobby";
 
-type View = "today" | "courses" | "questions" | "projects" | "tasks" | "week" | "admin";
+type View = "home" | "plan" | "bank" | "english" | "tasks" | "admin";
 type Status = "pending" | "done" | "not_done";
 type ProgressMap = Record<string, Status>;
 type Task = { id: number; title: string; category: string; dueDate: string; done: boolean };
-type StudySubjectId = SubjectId | EnemSubjectId;
-type SubjectSelection = StudySubjectId | "all" | "exams" | "bank";
+type StudySubjectId = EnemSubjectId | "english";
+type SubjectSelection = EnemSubjectId | "all" | "exams";
 type Stage = "theory" | "practice" | "mastery";
 type SkillProgress = Record<string, Partial<Record<Stage, boolean>>>;
 type AssessmentRecord = { date: string; lc: string; ch: string; cn: string; math: string; time: string };
 type AssessmentMap = Record<string, AssessmentRecord>;
 type SyncState = "offline" | "syncing" | "synced" | "error";
-type CloudDashboard = {
-  progress?: ProgressMap;
-  skillProgress?: SkillProgress;
-  assessmentResults?: AssessmentMap;
-  questionProgress?: QuestionProgressMap;
-  schoolLessonProgress?: SchoolLessonProgress;
-  tasks?: Task[];
-};
+type CloudDashboard = { progress?: ProgressMap; skillProgress?: SkillProgress; assessmentResults?: AssessmentMap; questionProgress?: QuestionProgressMap; tasks?: Task[] };
+type SubjectMeta = { id: StudySubjectId; name: string; shortName: string; icon: string; color: string; description: string };
 
-type SubjectMeta = {
-  id: StudySubjectId;
-  name: string;
-  shortName: string;
-  icon: string;
-  color: string;
-  description: string;
-};
-
-const viewLabels: Record<View, string> = { today: "Hoje", courses: "Trilhas", questions: "ENEM", projects: "Projetos", tasks: "Tarefas", week: "Semana", admin: "ADM" };
-const viewIcons: Record<View, string> = { today: "⌂", courses: "◫", questions: "?", projects: "◇", tasks: "✓", week: "▦", admin: "⚙" };
+const viewLabels: Record<View, string> = { home: "Início", plan: "Plano ENEM", bank: "Questões", english: "Inglês", tasks: "Agenda", admin: "ADM" };
+const viewIcons: Record<View, string> = { home: "⌂", plan: "◫", bank: "?", english: "EN", tasks: "✓", admin: "⚙" };
 const levels: EnemLevel[] = ["Nivelamento", "Básico I", "Básico II", "Construção", "Ataque"];
 const stages: { id: Stage; label: string; short: string }[] = [
   { id: "theory", label: "Teoria", short: "T" },
@@ -58,63 +38,39 @@ const stages: { id: Stage; label: string; short: string }[] = [
 ];
 
 const studySubjects: SubjectMeta[] = [
-  subjects.find((subject) => subject.id === "english")!,
-  subjects.find((subject) => subject.id === "math")!,
-  subjects.find((subject) => subject.id === "portuguese")!,
+  { id: "math", name: "Matemática", shortName: "MAT", icon: "x²", color: "#e6a23c", description: "Base matemática, funções, estatística, geometria e resolução de problemas." },
+  { id: "portuguese", name: "Linguagens", shortName: "LC", icon: "Aa", color: "#3478d4", description: "Interpretação, gramática, literatura, gêneros textuais e redação." },
   { id: "biology", name: "Biologia", shortName: "BIO", icon: "DNA", color: "#35a873", description: "Vida, ecologia, genética e fisiologia para o ENEM." },
   { id: "physics", name: "Física", shortName: "FIS", icon: "F=", color: "#e56b61", description: "Fenômenos, energia, movimento, eletricidade e óptica." },
   { id: "chemistry", name: "Química", shortName: "QUI", icon: "Qm", color: "#9a6fe8", description: "Matéria, reações, cálculos e química do cotidiano." },
-  { id: "history", name: "História", shortName: "HIS", icon: "H", color: "#d99b31", description: "Processos históricos do mundo antigo ao século XX." },
+  { id: "history", name: "História", shortName: "HIS", icon: "H", color: "#d99b31", description: "Processos históricos, Brasil e mundo contemporâneo." },
   { id: "geography", name: "Geografia", shortName: "GEO", icon: "◎", color: "#e47c38", description: "Espaço, economia, ambiente, campo e geopolítica." },
   { id: "philosophy", name: "Filosofia", shortName: "FIL", icon: "φ", color: "#51a976", description: "Pensadores, ética, política e teoria do conhecimento." },
   { id: "sociology", name: "Sociologia", shortName: "SOC", icon: "S", color: "#dc639a", description: "Sociedade, trabalho, cultura, política e movimentos sociais." },
-  subjects.find((subject) => subject.id === "programming")!,
+  subjects.find((subject) => subject.id === "english")!,
 ];
 
 type SkillWithId = EnemSkill & { id: string };
 const intensiveSkills: SkillWithId[] = enemData.skills.map((skill, index) => ({ ...skill, id: `enem-skill-${index}` }));
+const englishLessons = lessons.filter((lesson) => lesson.subject === "english");
 
-function subjectById(id: StudySubjectId) {
-  return studySubjects.find((subject) => subject.id === id)!;
-}
-
-function isEnemSubject(id: StudySubjectId): id is EnemSubjectId {
-  return id !== "english" && id !== "programming";
-}
-
-function hasQuestionBank(id: EnemSubjectId): id is QuestionSubject {
-  return id === "math" || id === "biology" || id === "chemistry" || id === "physics";
-}
-
-function getNextLesson(subject: SubjectId, progress: ProgressMap) {
-  const course = lessons.filter((lesson) => lesson.subject === subject);
-  return course.find((lesson) => progress[lesson.id] !== "done") ?? course.at(-1)!;
-}
-
-function formatDate(date: Date | null) {
-  if (!date) return "organizando o dia";
-  return new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(date);
-}
-
+function subjectById(id: StudySubjectId) { return studySubjects.find((subject) => subject.id === id)!; }
+function isEnemSubject(id: StudySubjectId): id is EnemSubjectId { return id !== "english"; }
+function hasQuestionBank(id: EnemSubjectId): id is QuestionSubject { return id === "math" || id === "biology" || id === "chemistry" || id === "physics"; }
+function formatDate(date: Date | null) { return date ? new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(date) : "organizando o dia"; }
 function displayTopic(skill: SkillWithId) {
-  const atomicPrefixes = ["Átomo", "Íons:", "Isótopos", "Distribuição eletrônica", "Efeitos luminosos"];
-  if (skill.page === 35 && atomicPrefixes.some((prefix) => skill.skill.startsWith(prefix))) return "Atomística";
-  return skill.topic;
+  const prefixes = ["Átomo", "Íons:", "Isótopos", "Distribuição eletrônica", "Efeitos luminosos"];
+  return skill.page === 35 && prefixes.some((prefix) => skill.skill.startsWith(prefix)) ? "Atomística" : skill.topic;
 }
-
-function totalAssessment(record?: AssessmentRecord) {
-  if (!record) return 0;
-  return [record.lc, record.ch, record.cn, record.math].reduce((sum, value) => sum + (Number(value) || 0), 0);
-}
+function totalAssessment(record?: AssessmentRecord) { return record ? [record.lc, record.ch, record.cn, record.math].reduce((sum, value) => sum + (Number(value) || 0), 0) : 0; }
 
 export default function StudyDashboard() {
-  const [view, setView] = useState<View>("today");
+  const [view, setView] = useState<View>("home");
   const [progress, setProgress] = useState<ProgressMap>({});
   const [skillProgress, setSkillProgress] = useState<SkillProgress>({});
   const [assessmentResults, setAssessmentResults] = useState<AssessmentMap>({});
   const [questionProgress, setQuestionProgress] = useState<QuestionProgressMap>({});
   const [questionFocus, setQuestionFocus] = useState<QuestionFocus | null>(null);
-  const [schoolLessonProgress, setSchoolLessonProgress] = useState<SchoolLessonProgress>({});
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<SkillWithId | null>(null);
@@ -124,7 +80,7 @@ export default function StudyDashboard() {
   const [selectedLevel, setSelectedLevel] = useState<EnemLevel | "all">("all");
   const [courseSearch, setCourseSearch] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
-  const [taskCategory, setTaskCategory] = useState("Escola");
+  const [taskCategory, setTaskCategory] = useState("ENEM");
   const [taskDueDate, setTaskDueDate] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -137,466 +93,154 @@ export default function StudyDashboard() {
   const [pdfAllowed, setPdfAllowed] = useState(false);
   const [siteBlocked, setSiteBlocked] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
-  const [studentYear, setStudentYear] = useState<SchoolYear | null>(null);
-  const [legacySchoolYear, setLegacySchoolYear] = useState<SchoolYear | null>(null);
-  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
-  const [accountReady, setAccountReady] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
-    void getDoc(doc(firestore, "appSettings", "main")).then((snapshot) => {
-      if (snapshot.exists()) setAppSettings({ ...defaultAppSettings, ...snapshot.data() } as AppSettings);
-    }).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const loadSavedState = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       try {
         setCurrentDate(new Date());
-        const savedProgress = window.localStorage.getItem("lord-focus-progress");
-        const savedTasks = window.localStorage.getItem("lord-focus-tasks");
-        const savedSkillProgress = window.localStorage.getItem("lord-enem-progress");
-        const savedAssessments = window.localStorage.getItem("lord-enem-assessments");
-        const savedQuestionProgress = window.localStorage.getItem("lord-question-progress");
-        const savedSchoolLessonProgress = window.localStorage.getItem("lord-school-lesson-progress");
-        const savedSchoolYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
-        if (savedProgress) setProgress(JSON.parse(savedProgress));
-        if (savedTasks) setTasks(JSON.parse(savedTasks));
-        if (savedSkillProgress) setSkillProgress(JSON.parse(savedSkillProgress));
-        if (savedAssessments) setAssessmentResults(JSON.parse(savedAssessments));
-        if (savedQuestionProgress) setQuestionProgress(JSON.parse(savedQuestionProgress));
-        if (savedSchoolLessonProgress) setSchoolLessonProgress(JSON.parse(savedSchoolLessonProgress));
-        if (savedSchoolYear && schoolYears.some((item) => item.id === savedSchoolYear)) { setStudentYear(savedSchoolYear); setLegacySchoolYear(savedSchoolYear); }
-      } catch {
-        setNotice("O painel abriu, mas não conseguiu ler o progresso salvo neste navegador.");
-      } finally {
-        setLoading(false);
-      }
+        setProgress(JSON.parse(window.localStorage.getItem("lord-focus-progress") ?? "{}"));
+        setSkillProgress(JSON.parse(window.localStorage.getItem("lord-enem-progress") ?? "{}"));
+        setAssessmentResults(JSON.parse(window.localStorage.getItem("lord-enem-assessments") ?? "{}"));
+        setQuestionProgress(JSON.parse(window.localStorage.getItem("lord-question-progress") ?? "{}"));
+        setTasks(JSON.parse(window.localStorage.getItem("lord-focus-tasks") ?? "[]"));
+      } catch { setNotice("Não consegui ler o progresso deste navegador."); }
+      finally { setLoading(false); }
     }, 0);
-    return () => window.clearTimeout(loadSavedState);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => onAuthStateChanged(firebaseAuth, async (currentUser) => {
-    setUser(currentUser);
-    setAccountReady(false);
-    setCloudReady(false);
-    setStudentProfile(null);
-
-    if (!currentUser) {
-      setSyncState("offline");
-      setPdfAllowed(false);
-      setSiteBlocked(false);
-      setStudentYear(null);
-      setView((current) => current === "admin" ? "today" : current);
-      setAuthLoading(false);
-      setAccountReady(true);
-      return;
-    }
-
+    setUser(currentUser); setCloudReady(false);
+    if (!currentUser) { setSyncState("offline"); setPdfAllowed(false); setSiteBlocked(false); setView((current) => current === "admin" ? "home" : current); setAuthLoading(false); return; }
     setSyncState("syncing");
     try {
-      await setDoc(doc(firestore, "userDirectory", currentUser.uid), {
-        uid: currentUser.uid,
-        email: currentUser.email,
-        displayName: currentUser.displayName ?? "",
-        photoURL: currentUser.photoURL ?? "",
-        lastSeenAt: serverTimestamp(),
-      }, { merge: true });
-      const [accessSnapshot, controlsSnapshot, settingsSnapshot, profileSnapshot] = await Promise.all([
-        getDoc(doc(firestore, "pdfAccess", currentUser.uid)),
-        getDoc(doc(firestore, "userControls", currentUser.uid)),
-        getDoc(doc(firestore, "appSettings", "main")),
-        getDoc(doc(firestore, "studentProfiles", currentUser.uid)),
+      await setDoc(doc(firestore, "userDirectory", currentUser.uid), { uid: currentUser.uid, email: currentUser.email, displayName: currentUser.displayName ?? "", photoURL: currentUser.photoURL ?? "", lastSeenAt: serverTimestamp() }, { merge: true });
+      const [accessSnapshot, controlsSnapshot, settingsSnapshot, cloudSnapshot] = await Promise.all([
+        getDoc(doc(firestore, "pdfAccess", currentUser.uid)), getDoc(doc(firestore, "userControls", currentUser.uid)),
+        getDoc(doc(firestore, "appSettings", "main")), getDoc(doc(firestore, "users", currentUser.uid, "dashboard", "main")),
       ]);
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
       setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
-      const localYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
-      const rawProfile = profileSnapshot.exists() ? profileSnapshot.data() : null;
-      if (isCompleteStudentProfile(rawProfile)) {
-        const profile = { ...rawProfile, uid: currentUser.uid, email: currentUser.email ?? rawProfile.email } as StudentProfile;
-        const activeYear = currentSchoolYear(profile);
-        setStudentProfile(profile);
-        setStudentYear(isOwner(currentUser.email) && localYear && schoolYears.some((item) => item.id === localYear) ? localYear : activeYear);
-        window.localStorage.setItem("lord-school-year", activeYear);
-      } else if (isOwner(currentUser.email)) {
-        const ownerYear = localYear && schoolYears.some((item) => item.id === localYear) ? localYear : "3em";
-        setStudentYear(ownerYear);
-      } else {
-        setStudentYear(null);
-      }
       const resetToken = controlsSnapshot.exists() ? Number(controlsSnapshot.data().resetToken ?? 0) : 0;
       const previousResetToken = Number(window.localStorage.getItem("lord-admin-reset-token") ?? 0);
       if (resetToken > previousResetToken) {
-        ["lord-focus-progress", "lord-focus-tasks", "lord-enem-progress", "lord-enem-assessments", "lord-question-progress", "lord-school-lesson-progress"].forEach((key) => window.localStorage.removeItem(key));
-        setProgress({}); setTasks([]); setSkillProgress({}); setAssessmentResults({}); setQuestionProgress({}); setSchoolLessonProgress({});
+        ["lord-focus-progress", "lord-focus-tasks", "lord-enem-progress", "lord-enem-assessments", "lord-question-progress"].forEach((key) => window.localStorage.removeItem(key));
+        setProgress({}); setTasks([]); setSkillProgress({}); setAssessmentResults({}); setQuestionProgress({});
         window.localStorage.setItem("lord-admin-reset-token", String(resetToken));
       }
-      const dashboardRef = doc(firestore, "users", currentUser.uid, "dashboard", "main");
-      const cloudSnapshot = await getDoc(dashboardRef);
-
       if (cloudSnapshot.exists()) {
         const cloud = cloudSnapshot.data() as CloudDashboard;
-        if (cloud.progress) {
-          setProgress(cloud.progress);
-          window.localStorage.setItem("lord-focus-progress", JSON.stringify(cloud.progress));
-        }
-        if (cloud.skillProgress) {
-          setSkillProgress(cloud.skillProgress);
-          window.localStorage.setItem("lord-enem-progress", JSON.stringify(cloud.skillProgress));
-        }
-        if (cloud.assessmentResults) {
-          setAssessmentResults(cloud.assessmentResults);
-          window.localStorage.setItem("lord-enem-assessments", JSON.stringify(cloud.assessmentResults));
-        }
-        if (cloud.questionProgress) {
-          setQuestionProgress(cloud.questionProgress);
-          window.localStorage.setItem("lord-question-progress", JSON.stringify(cloud.questionProgress));
-        }
-        if (cloud.schoolLessonProgress) {
-          setSchoolLessonProgress(cloud.schoolLessonProgress);
-          window.localStorage.setItem("lord-school-lesson-progress", JSON.stringify(cloud.schoolLessonProgress));
-        }
-        if (cloud.tasks) {
-          setTasks(cloud.tasks);
-          window.localStorage.setItem("lord-focus-tasks", JSON.stringify(cloud.tasks));
-        }
+        if (cloud.progress) { setProgress(cloud.progress); window.localStorage.setItem("lord-focus-progress", JSON.stringify(cloud.progress)); }
+        if (cloud.skillProgress) { setSkillProgress(cloud.skillProgress); window.localStorage.setItem("lord-enem-progress", JSON.stringify(cloud.skillProgress)); }
+        if (cloud.assessmentResults) { setAssessmentResults(cloud.assessmentResults); window.localStorage.setItem("lord-enem-assessments", JSON.stringify(cloud.assessmentResults)); }
+        if (cloud.questionProgress) { setQuestionProgress(cloud.questionProgress); window.localStorage.setItem("lord-question-progress", JSON.stringify(cloud.questionProgress)); }
+        if (cloud.tasks) { setTasks(cloud.tasks); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(cloud.tasks)); }
       } else {
-        const localDashboard: CloudDashboard = {
-          progress: JSON.parse(window.localStorage.getItem("lord-focus-progress") ?? "{}"),
-          skillProgress: JSON.parse(window.localStorage.getItem("lord-enem-progress") ?? "{}"),
-          assessmentResults: JSON.parse(window.localStorage.getItem("lord-enem-assessments") ?? "{}"),
-          questionProgress: JSON.parse(window.localStorage.getItem("lord-question-progress") ?? "{}"),
-          schoolLessonProgress: JSON.parse(window.localStorage.getItem("lord-school-lesson-progress") ?? "{}"),
-          tasks: JSON.parse(window.localStorage.getItem("lord-focus-tasks") ?? "[]"),
-        };
-        await setDoc(dashboardRef, { ...localDashboard, updatedAt: serverTimestamp() });
+        const localDashboard: CloudDashboard = { progress: JSON.parse(window.localStorage.getItem("lord-focus-progress") ?? "{}"), skillProgress: JSON.parse(window.localStorage.getItem("lord-enem-progress") ?? "{}"), assessmentResults: JSON.parse(window.localStorage.getItem("lord-enem-assessments") ?? "{}"), questionProgress: JSON.parse(window.localStorage.getItem("lord-question-progress") ?? "{}"), tasks: JSON.parse(window.localStorage.getItem("lord-focus-tasks") ?? "[]") };
+        await setDoc(doc(firestore, "users", currentUser.uid, "dashboard", "main"), { ...localDashboard, updatedAt: serverTimestamp() });
       }
-
-      setCloudReady(true);
-      setSyncState("synced");
-      if (isCompleteStudentProfile(profileSnapshot.exists() ? profileSnapshot.data() : null) || isOwner(currentUser.email)) setNotice("Conta conectada. Seu progresso agora acompanha você no celular e no notebook.");
-    } catch {
-      setSyncState("error");
-      setNotice("Entrei na conta, mas o Firebase recusou a sincronização. Confira o Firestore e as regras.");
-    } finally {
-      setAuthLoading(false);
-      setAccountReady(true);
-    }
+      setCloudReady(true); setSyncState("synced"); setNotice("Conta conectada. Seu progresso do ENEM está sincronizado.");
+    } catch { setSyncState("error"); setNotice("Entrei na conta, mas a sincronização não respondeu. O progresso continua salvo neste aparelho."); }
+    finally { setAuthLoading(false); }
   }), []);
 
   async function saveToCloud(changes: CloudDashboard) {
     if (!user || !cloudReady) return;
     setSyncState("syncing");
-    try {
-      await setDoc(
-        doc(firestore, "users", user.uid, "dashboard", "main"),
-        { ...changes, updatedAt: serverTimestamp() },
-        { merge: true },
-      );
-      setSyncState("synced");
-    } catch {
-      setSyncState("error");
-      setNotice("Salvei neste aparelho, mas a nuvem não respondeu. Vou manter seu progresso local.");
-    }
+    try { await setDoc(doc(firestore, "users", user.uid, "dashboard", "main"), { ...changes, updatedAt: serverTimestamp() }, { merge: true }); setSyncState("synced"); }
+    catch { setSyncState("error"); setNotice("Salvei neste aparelho, mas a nuvem não respondeu."); }
   }
-
   async function connectGoogle() {
-    try {
-      await signInWithPopup(firebaseAuth, googleProvider);
-    } catch (error) {
-      const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
-      if (code !== "auth/popup-closed-by-user") {
-        setNotice("Não consegui abrir o login Google. Confira se este domínio está autorizado no Firebase.");
-      }
-    }
+    try { await signInWithPopup(firebaseAuth, googleProvider); }
+    catch (error) { const code = typeof error === "object" && error && "code" in error ? String(error.code) : ""; if (code !== "auth/popup-closed-by-user") setNotice("Não consegui abrir o login Google. Confira o domínio no Firebase."); }
   }
+  async function disconnectGoogle() { await signOut(firebaseAuth); setNotice("Conta desconectada."); }
 
-  async function disconnectGoogle() {
-    await signOut(firebaseAuth);
-    setStudentProfile(null); setStudentYear(null); setProfileOpen(false);
-    setNotice("Conta desconectada.");
-  }
-
-  async function selectSchoolYear(year: SchoolYear) {
-    if (!isOwner(user?.email)) return;
-    setStudentYear(year); setProfileOpen(false); window.localStorage.setItem("lord-school-year", year);
-    setNotice(`Visualização do dono alterada para ${yearLabel(year)}.`);
-  }
-
-  async function registerStudent(draft: RegistrationDraft) {
-    if (!user?.email) return { ok: false, message: "Entre com Google novamente para continuar." };
-    const raKey = normalizeRa(draft.ra);
-    const academicYear = currentAcademicYear();
-    const profile: StudentProfile = {
-      uid: user.uid,
-      email: user.email,
-      name: draft.name,
-      institutionalEmail: draft.institutionalEmail,
-      ra: raKey,
-      raKey,
-      raDigit: draft.raDigit,
-      entrySchoolYear: draft.schoolYear,
-      schoolYear: draft.schoolYear,
-      entryAcademicYear: academicYear,
-      registrationComplete: true,
-    };
-    try {
-      const batch = writeBatch(firestore);
-      batch.set(doc(firestore, "studentRaRegistry", raKey), {
-        uid: user.uid,
-        raKey,
-        raDigit: draft.raDigit,
-        createdAt: serverTimestamp(),
-      });
-      batch.set(doc(firestore, "studentProfiles", user.uid), {
-        ...profile,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      await batch.commit();
-      setStudentProfile(profile);
-      setStudentYear(draft.schoolYear);
-      window.localStorage.setItem("lord-school-year", draft.schoolYear);
-      setNotice(`Cadastro concluído. Seu painel foi preparado para o ${yearLabel(draft.schoolYear)}.`);
-      return { ok: true, message: "Cadastro concluído." };
-    } catch {
-      return { ok: false, message: "Este RA já está cadastrado em outra conta ou as regras novas do Firebase ainda não foram publicadas. Fale com o ADM." };
-    }
-  }
-
-  const todaySchedule = currentDate ? weeklyPlan.filter((item) => item.day === currentDate.getDay()) : [];
-  const lessonDoneCount = Object.values(progress).filter((status) => status === "done").length;
   const skillStageDoneCount = Object.values(skillProgress).reduce((sum, item) => sum + stages.filter((stage) => item[stage.id]).length, 0);
-  const totalTrackable = lessons.length + intensiveSkills.length * stages.length;
-  const gradeQuestionTotal = studentYear ? subjectsForYear(studentYear).length * 100 : 0;
-  const gradeQuestionDone = studentYear ? Object.entries(questionProgress).filter(([id, attempt]) => id.startsWith(`school-${studentYear}-`) && Boolean(attempt.answer || attempt.note?.trim())).length : 0;
-  const gradeLessonTotal = studentYear ? subjectsForYear(studentYear).length * 10 : 0;
-  const gradeLessonDone = studentYear ? Object.keys(schoolLessonProgress).filter((id) => id.startsWith(`school-lesson-${studentYear}-`)).length : 0;
-  const sidebarDone = isOwner(user?.email) ? lessonDoneCount + skillStageDoneCount : gradeLessonDone + gradeQuestionDone;
-  const sidebarTotal = isOwner(user?.email) ? totalTrackable : gradeLessonTotal + gradeQuestionTotal;
-  const sidebarPercent = sidebarTotal ? Math.round((sidebarDone / sidebarTotal) * 100) : 0;
-  const nextBySubject = useMemo(() => Object.fromEntries(subjects.map((subject) => [subject.id, getNextLesson(subject.id, progress)])) as Record<SubjectId, Lesson>, [progress]);
+  const answeredCount = Object.values(questionProgress).filter((attempt) => Boolean(attempt.answer || attempt.note?.trim())).length;
+  const sidebarDone = skillStageDoneCount + answeredCount;
+  const sidebarPercent = Math.min(100, Math.round((sidebarDone / (intensiveSkills.length * 3 + 1000)) * 100));
+  const nextGlobalSkill = intensiveSkills.find((skill) => !skillProgress[skill.id]?.mastery) ?? intensiveSkills[0];
+  const nextEnglishLesson = englishLessons.find((lesson) => progress[lesson.id] !== "done") ?? englishLessons.at(-1)!;
 
   const activeEnemSkills = useMemo(() => {
-    if (selectedSubject === "all" || selectedSubject === "exams" || selectedSubject === "bank" || !isEnemSubject(selectedSubject)) return [];
+    if (selectedSubject === "all" || selectedSubject === "exams") return [];
     const query = courseSearch.trim().toLocaleLowerCase("pt-BR");
-    return intensiveSkills.filter((skill) => {
-      const matchesSubject = skill.subject === selectedSubject;
-      const matchesLevel = selectedLevel === "all" || skill.level === selectedLevel;
-      const matchesSearch = !query || `${displayTopic(skill)} ${skill.skill} ${skill.relevance}`.toLocaleLowerCase("pt-BR").includes(query);
-      return matchesSubject && matchesLevel && matchesSearch;
-    });
+    return intensiveSkills.filter((skill) => skill.subject === selectedSubject && (selectedLevel === "all" || skill.level === selectedLevel) && (!query || `${displayTopic(skill)} ${skill.skill} ${skill.relevance}`.toLocaleLowerCase("pt-BR").includes(query)));
   }, [courseSearch, selectedLevel, selectedSubject]);
-
   const topicGroups = useMemo(() => {
     const groups = new Map<string, SkillWithId[]>();
-    activeEnemSkills.forEach((skill) => {
-      const key = `${skill.level}|||${displayTopic(skill)}`;
-      groups.set(key, [...(groups.get(key) ?? []), skill]);
-    });
-    return Array.from(groups.entries()).map(([key, skills]) => {
-      const [level, topic] = key.split("|||");
-      return { level: level as EnemLevel, topic, skills };
-    });
+    activeEnemSkills.forEach((skill) => { const key = `${skill.level}|||${displayTopic(skill)}`; groups.set(key, [...(groups.get(key) ?? []), skill]); });
+    return Array.from(groups.entries()).map(([key, skills]) => { const [level, topic] = key.split("|||"); return { level: level as EnemLevel, topic, skills }; });
   }, [activeEnemSkills]);
 
   function setLessonStatus(lesson: Lesson, status: Status) {
-    try {
-      const next = { ...progress, [lesson.id]: status };
-      setProgress(next);
-      window.localStorage.setItem("lord-focus-progress", JSON.stringify(next));
-      void saveToCloud({ progress: next });
-      setNotice(status === "done" ? "Aula concluída. A próxima já entrou na fila." : "Marcado como não feito. A aula continua na sua fila.");
-    } catch { setNotice("Não consegui salvar agora. Tente novamente."); }
+    const next = { ...progress, [lesson.id]: status }; setProgress(next); window.localStorage.setItem("lord-focus-progress", JSON.stringify(next)); void saveToCloud({ progress: next }); setNotice(status === "done" ? "Aula de inglês concluída." : "A aula continua na fila.");
   }
-
   function toggleSkillStage(skill: SkillWithId, stage: Stage) {
-    try {
-      const next = { ...skillProgress, [skill.id]: { ...skillProgress[skill.id], [stage]: !skillProgress[skill.id]?.[stage] } };
-      setSkillProgress(next);
-      window.localStorage.setItem("lord-enem-progress", JSON.stringify(next));
-      void saveToCloud({ skillProgress: next });
-      setNotice(`${stages.find((item) => item.id === stage)?.label} atualizada em ${displayTopic(skill)}.`);
-    } catch { setNotice("Não consegui salvar essa etapa agora."); }
+    const next = { ...skillProgress, [skill.id]: { ...skillProgress[skill.id], [stage]: !skillProgress[skill.id]?.[stage] } }; setSkillProgress(next); window.localStorage.setItem("lord-enem-progress", JSON.stringify(next)); void saveToCloud({ skillProgress: next }); setNotice(`${stages.find((item) => item.id === stage)?.label} atualizada em ${displayTopic(skill)}.`);
   }
-
-  function requestSkillStage(skill: SkillWithId, stage: Stage) {
-    if (stage === "mastery" && !skillProgress[skill.id]?.mastery && appSettings.assessmentsEnabled) {
-      setMasterySkill(skill);
-      return;
-    }
-    toggleSkillStage(skill, stage);
-  }
-
+  function requestSkillStage(skill: SkillWithId, stage: Stage) { if (stage === "mastery" && !skillProgress[skill.id]?.mastery && appSettings.assessmentsEnabled) return setMasterySkill(skill); toggleSkillStage(skill, stage); }
   function updateAssessment(name: string, field: keyof AssessmentRecord, value: string) {
-    const empty: AssessmentRecord = { date: "", lc: "", ch: "", cn: "", math: "", time: "" };
-    const next = { ...assessmentResults, [name]: { ...(assessmentResults[name] ?? empty), [field]: value } };
-    setAssessmentResults(next);
-    window.localStorage.setItem("lord-enem-assessments", JSON.stringify(next));
-    void saveToCloud({ assessmentResults: next });
+    const empty: AssessmentRecord = { date: "", lc: "", ch: "", cn: "", math: "", time: "" }; const next = { ...assessmentResults, [name]: { ...(assessmentResults[name] ?? empty), [field]: value } }; setAssessmentResults(next); window.localStorage.setItem("lord-enem-assessments", JSON.stringify(next)); void saveToCloud({ assessmentResults: next });
   }
-
-  function updateQuestionProgress(next: QuestionProgressMap) {
-    setQuestionProgress(next);
-    window.localStorage.setItem("lord-question-progress", JSON.stringify(next));
-    void saveToCloud({ questionProgress: next });
-  }
-
-  function completeSchoolLesson(lesson: SchoolLesson) {
-    const next = { ...schoolLessonProgress, [lesson.id]: { completedAt: new Date().toISOString() } };
-    setSchoolLessonProgress(next);
-    window.localStorage.setItem("lord-school-lesson-progress", JSON.stringify(next));
-    void saveToCloud({ schoolLessonProgress: next });
-    setNotice(`Aula ${lesson.number} concluída. A próxima etapa foi liberada.`);
-  }
-
-  function openQuestionForSkill(skill: SkillWithId) {
-    if (!hasQuestionBank(skill.subject)) return;
-    setQuestionFocus({ subject: skill.subject, topic: `${displayTopic(skill)} ${skill.skill}`, nonce: Date.now() });
-    setSelectedSkill(null);
-    setView("questions");
-  }
-
-  function addTask(event: FormEvent) {
-    event.preventDefault();
-    if (!taskTitle.trim()) return;
-    try {
-      const task: Task = { id: Date.now(), title: taskTitle.trim(), category: taskCategory, dueDate: taskDueDate, done: false };
-      const next = [task, ...tasks];
-      setTasks(next);
-      window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next));
-      void saveToCloud({ tasks: next });
-      setTaskTitle(""); setTaskDueDate("");
-      setNotice("Tarefa guardada. Agora você não precisa lembrar sozinho.");
-    } catch { setNotice("Não consegui guardar a tarefa. Tente novamente."); }
-  }
-
-  function toggleTask(task: Task) {
-    const next = tasks.map((item) => item.id === task.id ? { ...item, done: !item.done } : item);
-    setTasks(next); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next)); void saveToCloud({ tasks: next });
-  }
-
-  function deleteTask(task: Task) {
-    const next = tasks.filter((item) => item.id !== task.id);
-    setTasks(next); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next)); void saveToCloud({ tasks: next });
-  }
-
-  async function copyText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setNotice("Mensagem copiada. Agora é só colar no ChatGPT.");
-    } catch { setNotice("Não consegui copiar automaticamente. Selecione a mensagem e copie."); }
-  }
-
-  function goToSubject(id: StudySubjectId) {
-    setSelectedSubject(id); setSelectedLevel("all"); setCourseSearch("");
-    setView(isEnemSubject(id) ? "questions" : "courses");
-  }
-
-  function getSubjectProgress(id: StudySubjectId) {
-    if (!isEnemSubject(id)) {
-      const course = lessons.filter((lesson) => lesson.subject === id);
-      return { done: course.filter((lesson) => progress[lesson.id] === "done").length, total: course.length };
-    }
-    const skills = intensiveSkills.filter((skill) => skill.subject === id);
-    const done = skills.reduce((sum, skill) => sum + stages.filter((stage) => skillProgress[skill.id]?.[stage.id]).length, 0);
-    return { done, total: skills.length * 3 };
-  }
-
-  function nextSkillFor(id: EnemSubjectId) {
-    return intensiveSkills.find((skill) => skill.subject === id && !skillProgress[skill.id]?.mastery) ?? intensiveSkills.find((skill) => skill.subject === id)!;
-  }
-
-  function renderClassicCourse(subjectId: SubjectId) {
-    const filtered = lessons.filter((lesson) => lesson.subject === subjectId);
-    const subject = subjectById(subjectId);
-    return <div className="lesson-list">{filtered.map((lesson) => { const status = progress[lesson.id] ?? "pending"; return <article className={`lesson-row ${status}`} key={lesson.id} style={{ "--accent": subject.color } as React.CSSProperties}><div className="lesson-number">{status === "done" ? "✓" : lesson.number}</div><div className="lesson-main"><div className="card-kicker">{subject.name} · semana {lesson.week}{lesson.project ? ` · ${lesson.project}` : ""}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p></div><div className="lesson-meta"><span>{lesson.duration}</span>{status === "not_done" && <small>Voltou para a fila</small>}<button onClick={() => setSelectedLesson(lesson)}>{status === "done" ? "Rever" : "Abrir"} →</button></div></article>; })}</div>;
-  }
+  function updateQuestionProgress(next: QuestionProgressMap) { setQuestionProgress(next); window.localStorage.setItem("lord-question-progress", JSON.stringify(next)); void saveToCloud({ questionProgress: next }); }
+  function openQuestionForSkill(skill: SkillWithId) { if (!hasQuestionBank(skill.subject)) return; setQuestionFocus({ subject: skill.subject, topic: `${displayTopic(skill)} ${skill.skill}`, nonce: Date.now() }); setSelectedSkill(null); setView("bank"); }
+  function addTask(event: FormEvent) { event.preventDefault(); if (!taskTitle.trim()) return; const task: Task = { id: Date.now(), title: taskTitle.trim(), category: taskCategory, dueDate: taskDueDate, done: false }; const next = [task, ...tasks]; setTasks(next); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next)); void saveToCloud({ tasks: next }); setTaskTitle(""); setTaskDueDate(""); setNotice("Planejamento guardado."); }
+  function toggleTask(task: Task) { const next = tasks.map((item) => item.id === task.id ? { ...item, done: !item.done } : item); setTasks(next); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next)); void saveToCloud({ tasks: next }); }
+  function deleteTask(task: Task) { const next = tasks.filter((item) => item.id !== task.id); setTasks(next); window.localStorage.setItem("lord-focus-tasks", JSON.stringify(next)); void saveToCloud({ tasks: next }); }
+  async function copyText(text: string) { try { await navigator.clipboard.writeText(text); setNotice("Mensagem copiada."); } catch { setNotice("Não consegui copiar automaticamente."); } }
+  function goToSubject(id: EnemSubjectId) { setSelectedSubject(id); setSelectedLevel("all"); setCourseSearch(""); setView("plan"); }
+  function getSubjectProgress(id: EnemSubjectId) { const subjectSkills = intensiveSkills.filter((skill) => skill.subject === id); const done = subjectSkills.reduce((sum, skill) => sum + stages.filter((stage) => skillProgress[skill.id]?.[stage.id]).length, 0); return { done, total: subjectSkills.length * 3 }; }
+  function nextSkillFor(id: EnemSubjectId) { return intensiveSkills.find((skill) => skill.subject === id && !skillProgress[skill.id]?.mastery) ?? intensiveSkills.find((skill) => skill.subject === id)!; }
 
   function renderSubjectHub() {
     const enemSubjects = studySubjects.filter((subject): subject is SubjectMeta & { id: EnemSubjectId } => isEnemSubject(subject.id));
-    return <><section className="enem-home-hero"><div><span className="eyebrow">ÁREA EXCLUSIVA · ENEM</span><h2>Trilhas, provas e 1.000 questões em um lugar separado.</h2><p>Aqui fica somente a preparação para o ENEM. As aulas normais da sua série permanecem na aba Trilhas.</p><div><button className="primary" onClick={() => setSelectedSubject("bank")}>Abrir 1.000 questões →</button><button className="secondary" onClick={() => setSelectedSubject("exams")}>Provas e simulados</button></div></div><aside><strong>747</strong><span>habilidades</span><strong>1.000</strong><span>questões</span></aside></section><div className="subject-hub">{enemSubjects.map((subject) => { const stats = getSubjectProgress(subject.id); const skillCount = intensiveSkills.filter((skill) => skill.subject === subject.id).length; return <button className="subject-hub-card" key={subject.id} style={{ "--accent": subject.color } as React.CSSProperties} onClick={() => goToSubject(subject.id)}><span className="subject-hub-icon">{subject.icon}</span><div><span className="eyebrow">{skillCount} habilidades</span><h3>{subject.name}</h3><p>{subject.description}</p><div className="subject-card-progress"><span style={{ width: `${stats.total ? (stats.done / stats.total) * 100 : 0}%` }} /></div><small>{stats.done} de {stats.total} etapas marcadas</small></div><b>→</b></button>; })}</div><section className="enem-bank-entry"><div><span className="eyebrow">CADERNO SAME · ENEM</span><h3>Pronto para praticar?</h3><p>Abra as 1.000 questões apenas quando quiser treinar o formato da prova.</p></div><button className="primary" onClick={() => setSelectedSubject("bank")}>Abrir caderno →</button><button className="secondary" onClick={() => setSelectedSubject("exams")}>Provas e simulados</button></section></>;
+    return <><section className="enem-home-hero"><div><span className="eyebrow">MAPA COMPLETO · ENEM</span><h2>Um único caminho para chegar preparado à prova.</h2><p>O cronograma original foi preservado: 747 habilidades organizadas do nivelamento ao ataque.</p><div><button className="primary" onClick={() => setView("bank")}>Abrir 1.000 questões →</button><button className="secondary" onClick={() => setSelectedSubject("exams")}>Provas e simulados</button></div></div><aside><strong>747</strong><span>habilidades</span><strong>1.000</strong><span>questões</span></aside></section><div className="subject-hub">{enemSubjects.map((subject) => { const stats = getSubjectProgress(subject.id); const skillCount = intensiveSkills.filter((skill) => skill.subject === subject.id).length; return <button className="subject-hub-card" key={subject.id} style={{ "--accent": subject.color } as React.CSSProperties} onClick={() => goToSubject(subject.id)}><span className="subject-hub-icon">{subject.icon}</span><div><span className="eyebrow">{skillCount} habilidades</span><h3>{subject.name}</h3><p>{subject.description}</p><div className="subject-card-progress"><span style={{ width: `${stats.total ? (stats.done / stats.total) * 100 : 0}%` }} /></div><small>{stats.done} de {stats.total} etapas marcadas</small></div><b>→</b></button>; })}</div></>;
   }
 
   function renderEnemCourse(subjectId: EnemSubjectId) {
-    const subject = subjectById(subjectId);
-    const overview = enemData.overview.filter((item) => item.subject === subjectId);
-    const allSubjectSkills = intensiveSkills.filter((skill) => skill.subject === subjectId);
-    const videos = enemData.videos.filter((video) => video.subject === subjectId);
-    const stats = getSubjectProgress(subjectId);
-    const nextSkill = nextSkillFor(subjectId);
-    return <>
-      <section className="subject-focus" style={{ "--accent": subject.color } as React.CSSProperties}><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><div className="subject-focus-grid"><div><span className="eyebrow">TRILHA COMPLETA · {subject.shortName}</span><h2>{subject.name}</h2><p>{subject.description} A ordem vai do Nivelamento até o Ataque.</p><div className="subject-focus-actions"><button className="primary" onClick={() => setSelectedSkill(nextSkill)}>Continuar de onde parei →</button><span>{stats.done}/{stats.total} etapas · {Math.round((stats.done / stats.total) * 100)}%</span></div></div><div className="subject-score"><strong>{allSubjectSkills.length}</strong><span>habilidades detalhadas</span><small>{overview.length} temas na visão geral</small></div></div></section>
-
-      <section className="section-block"><div className="section-heading"><div><span className="eyebrow">VISÃO GERAL DO PDF</span><h2>Todos os temas</h2></div><span className="muted">Ordem original preservada</span></div><div className="overview-grid">{overview.map((item, index) => <article key={`${item.page}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><h3>{item.topic}</h3><p>{item.description}</p></article>)}</div></section>
-
-      {videos.length > 0 && <section className="section-block"><div className="section-heading"><div><span className="eyebrow">AULAS DO MATERIAL</span><h2>Vídeos indicados</h2></div><span className="muted">Links originais do PDF</span></div><div className="video-grid">{videos.map((video, index) => <a href={video.url} target="_blank" rel="noreferrer" key={video.url}><span>▶</span><div><small>AULA {String(index + 1).padStart(2, "0")}</small><strong>{video.title}</strong></div><b>↗</b></a>)}</div></section>}
-
-      <section className="section-block"><div className="section-heading"><div><span className="eyebrow">CHECKLIST INTENSIVO</span><h2>Teoria, prática e domínio</h2></div><span className="muted">{activeEnemSkills.length} habilidades exibidas</span></div><div className="curriculum-tools"><input aria-label="Pesquisar conteúdo" value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} placeholder={`Pesquisar em ${subject.name}...`} /><div className="level-filters"><button className={selectedLevel === "all" ? "active" : ""} onClick={() => setSelectedLevel("all")}>Todos</button>{levels.map((level) => <button key={level} className={selectedLevel === level ? "active" : ""} onClick={() => setSelectedLevel(level)}>{level}</button>)}</div></div><div className="topic-list">{topicGroups.map((group, groupIndex) => { const completed = group.skills.filter((skill) => skillProgress[skill.id]?.mastery).length; return <details className="topic-accordion" key={`${group.level}-${group.topic}`} open={groupIndex === 0}><summary><span className="level-pill">{group.level}</span><div><strong>{group.topic}</strong><small>{completed} de {group.skills.length} dominadas</small></div><b>{group.skills.length}</b></summary><div className="skill-list">{group.skills.map((skill, index) => <article className="skill-row" key={skill.id}><div className="skill-order">{String(index + 1).padStart(2, "0")}</div><div className="skill-copy"><strong>{skill.skill}</strong><small>{skill.relevance}</small></div><div className="stage-buttons" aria-label={`Progresso de ${skill.skill}`}>{stages.map((stage) => <button title={stage.label} aria-label={`${stage.label}: ${skill.skill}`} className={skillProgress[skill.id]?.[stage.id] ? "done" : ""} key={stage.id} onClick={() => toggleSkillStage(skill, stage.id)}>{skillProgress[skill.id]?.[stage.id] ? "✓" : stage.short}<span>{stage.label}</span></button>)}</div><button className="study-skill" onClick={() => setSelectedSkill(skill)}>Estudar →</button></article>)}</div></details>; })}{!topicGroups.length && <div className="empty-list large"><span>⌕</span><p>Nenhuma habilidade encontrada com esse filtro.</p></div>}</div></section>
-
-      {(subjectId === "math" || subjectId === "portuguese") && <section className="section-block legacy-plan"><div className="section-heading"><div><span className="eyebrow">PLANO QUE JÁ ESTAVA AQUI</span><h2>Sequência de 12 semanas</h2></div><span className="muted">Mantido sem apagar nada</span></div>{renderClassicCourse(subjectId)}</section>}
-    </>;
+    const subject = subjectById(subjectId); const overview = enemData.overview.filter((item) => item.subject === subjectId); const allSubjectSkills = intensiveSkills.filter((skill) => skill.subject === subjectId); const videos = enemData.videos.filter((video) => video.subject === subjectId); const stats = getSubjectProgress(subjectId); const nextSkill = nextSkillFor(subjectId);
+    return <><section className="subject-focus" style={{ "--accent": subject.color } as React.CSSProperties}><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><div className="subject-focus-grid"><div><span className="eyebrow">TRILHA COMPLETA · {subject.shortName}</span><h2>{subject.name}</h2><p>{subject.description} A ordem vai do Nivelamento até o Ataque.</p><div className="subject-focus-actions"><button className="primary" onClick={() => setSelectedSkill(nextSkill)}>Continuar de onde parei →</button><span>{stats.done}/{stats.total} etapas · {Math.round((stats.done / stats.total) * 100)}%</span></div></div><div className="subject-score"><strong>{allSubjectSkills.length}</strong><span>habilidades detalhadas</span><small>{overview.length} temas na visão geral</small></div></div></section>
+      <section className="section-block"><div className="section-heading"><div><span className="eyebrow">VISÃO GERAL DO CRONOGRAMA</span><h2>Todos os temas</h2></div><span className="muted">Ordem original preservada</span></div><div className="overview-grid">{overview.map((item, index) => <article key={`${item.page}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><h3>{item.topic}</h3><p>{item.description}</p></article>)}</div></section>
+      {videos.length > 0 && <section className="section-block"><div className="section-heading"><div><span className="eyebrow">AULAS DO MATERIAL</span><h2>Vídeos indicados</h2></div><span className="muted">Links originais do cronograma</span></div><div className="video-grid">{videos.map((video, index) => <a href={video.url} target="_blank" rel="noreferrer" key={video.url}><span>▶</span><div><small>AULA {String(index + 1).padStart(2, "0")}</small><strong>{video.title}</strong></div><b>↗</b></a>)}</div></section>}
+      <section className="section-block"><div className="section-heading"><div><span className="eyebrow">CHECKLIST INTENSIVO</span><h2>Teoria, prática e domínio</h2></div><span className="muted">{activeEnemSkills.length} habilidades exibidas</span></div><div className="curriculum-tools"><input aria-label="Pesquisar conteúdo" value={courseSearch} onChange={(event) => setCourseSearch(event.target.value)} placeholder={`Pesquisar em ${subject.name}...`} /><div className="level-filters"><button className={selectedLevel === "all" ? "active" : ""} onClick={() => setSelectedLevel("all")}>Todos</button>{levels.map((level) => <button key={level} className={selectedLevel === level ? "active" : ""} onClick={() => setSelectedLevel(level)}>{level}</button>)}</div></div><div className="topic-list">{topicGroups.map((group, groupIndex) => { const completed = group.skills.filter((skill) => skillProgress[skill.id]?.mastery).length; return <details className="topic-accordion" key={`${group.level}-${group.topic}`} open={groupIndex === 0}><summary><span className="level-pill">{group.level}</span><div><strong>{group.topic}</strong><small>{completed} de {group.skills.length} dominadas</small></div><b>{group.skills.length}</b></summary><div className="skill-list">{group.skills.map((skill, index) => <article className="skill-row" key={skill.id}><div className="skill-order">{String(index + 1).padStart(2, "0")}</div><div className="skill-copy"><strong>{skill.skill}</strong><small>{skill.relevance}</small></div><div className="stage-buttons" aria-label={`Progresso de ${skill.skill}`}>{stages.map((stage) => <button title={stage.label} aria-label={`${stage.label}: ${skill.skill}`} className={skillProgress[skill.id]?.[stage.id] ? "done" : ""} key={stage.id} onClick={() => requestSkillStage(skill, stage.id)}>{skillProgress[skill.id]?.[stage.id] ? "✓" : stage.short}<span>{stage.label}</span></button>)}</div><button className="study-skill" onClick={() => setSelectedSkill(skill)}>Estudar →</button></article>)}</div></details>; })}</div></section></>;
   }
 
   function renderAssessmentTracker() {
     const groups = [{ title: "Provas antigas do ENEM", items: enemData.exams }, { title: "Simulados autorais", items: enemData.simulations }];
-    return <><button className="back-link assessment-back" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><section className="assessment-hero"><span className="eyebrow">MÉTRICAS DO MAPA</span><h2>Provas antigas e simulados</h2><p>Registre data, acertos por área e tempo gasto. O total é calculado automaticamente.</p></section>{groups.map((group) => <section className="section-block" key={group.title}><div className="section-heading"><div><span className="eyebrow">ACOMPANHAMENTO</span><h2>{group.title}</h2></div><span className="muted">{group.items.length} registros</span></div><div className="assessment-table"><div className="assessment-row assessment-head"><span>Prova</span><span>Data</span><span>LC</span><span>CH</span><span>CN</span><span>MAT</span><span>Total</span><span>Tempo</span></div>{group.items.map((name) => { const record = assessmentResults[name]; return <div className="assessment-row" key={name}><strong>{name}</strong><input aria-label={`Data de ${name}`} type="date" value={record?.date ?? ""} onChange={(event) => updateAssessment(name, "date", event.target.value)} /><input aria-label={`LC de ${name}`} inputMode="numeric" value={record?.lc ?? ""} onChange={(event) => updateAssessment(name, "lc", event.target.value)} /><input aria-label={`CH de ${name}`} inputMode="numeric" value={record?.ch ?? ""} onChange={(event) => updateAssessment(name, "ch", event.target.value)} /><input aria-label={`CN de ${name}`} inputMode="numeric" value={record?.cn ?? ""} onChange={(event) => updateAssessment(name, "cn", event.target.value)} /><input aria-label={`Matemática de ${name}`} inputMode="numeric" value={record?.math ?? ""} onChange={(event) => updateAssessment(name, "math", event.target.value)} /><span className="assessment-total">{totalAssessment(record)}</span><input aria-label={`Tempo de ${name}`} placeholder="5h20" value={record?.time ?? ""} onChange={(event) => updateAssessment(name, "time", event.target.value)} /></div>; })}</div></section>)}</>;
+    return <><button className="back-link assessment-back" onClick={() => setSelectedSubject("all")}>← Voltar ao plano</button><section className="assessment-hero"><span className="eyebrow">ACOMPANHAMENTO REAL</span><h2>Provas antigas e simulados</h2><p>Registre data, acertos por área e tempo gasto.</p></section>{groups.map((group) => <section className="section-block" key={group.title}><div className="section-heading"><div><span className="eyebrow">DESEMPENHO</span><h2>{group.title}</h2></div><span className="muted">{group.items.length} registros</span></div><div className="assessment-table"><div className="assessment-row assessment-head"><span>Prova</span><span>Data</span><span>LC</span><span>CH</span><span>CN</span><span>MAT</span><span>Total</span><span>Tempo</span></div>{group.items.map((name) => { const record = assessmentResults[name]; return <div className="assessment-row" key={name}><strong>{name}</strong><input aria-label={`Data de ${name}`} type="date" value={record?.date ?? ""} onChange={(event) => updateAssessment(name, "date", event.target.value)} /><input aria-label={`LC de ${name}`} inputMode="numeric" value={record?.lc ?? ""} onChange={(event) => updateAssessment(name, "lc", event.target.value)} /><input aria-label={`CH de ${name}`} inputMode="numeric" value={record?.ch ?? ""} onChange={(event) => updateAssessment(name, "ch", event.target.value)} /><input aria-label={`CN de ${name}`} inputMode="numeric" value={record?.cn ?? ""} onChange={(event) => updateAssessment(name, "cn", event.target.value)} /><input aria-label={`Matemática de ${name}`} inputMode="numeric" value={record?.math ?? ""} onChange={(event) => updateAssessment(name, "math", event.target.value)} /><span className="assessment-total">{totalAssessment(record)}</span><input aria-label={`Tempo de ${name}`} placeholder="5h20" value={record?.time ?? ""} onChange={(event) => updateAssessment(name, "time", event.target.value)} /></div>; })}</div></section>)}</>;
   }
 
-  const visibleViews = (Object.keys(viewLabels) as View[]).filter((item) => {
-    if (item === "admin") return isOwner(user?.email);
-    if (item === "questions" && !isOwner(user?.email) && (!studentYear || !isHighSchool(studentYear))) return false;
-    if (!isOwner(user?.email) && (item === "projects" || item === "week")) return false;
-    return true;
-  });
-
-  const ownerAccount = isOwner(user?.email);
-  const registrationRequired = Boolean(user && !ownerAccount && !studentProfile);
-  if (authLoading || !accountReady || !user || registrationRequired) {
-    return <StudentLobby key={user?.uid ?? "anonymous"} user={user} loading={authLoading || Boolean(user && !accountReady)} suggestedYear={legacySchoolYear} onGoogleLogin={connectGoogle} onRegister={registerStudent} onSignOut={disconnectGoogle} />;
-  }
+  const visibleViews = (Object.keys(viewLabels) as View[]).filter((item) => item !== "admin" || isOwner(user?.email));
+  if (authLoading || !user) return <StudentLobby loading={authLoading} onGoogleLogin={connectGoogle} />;
 
   return <main className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">L</div><div><strong>Lord Focus</strong><span>Painel pessoal</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "questions") setSelectedSubject("all"); setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>{isOwner(user?.email) ? "Mapa completo" : studentYear ? schoolYears.find((item) => item.id === studentYear)?.short : "Sua série"}</strong><span>{sidebarDone} de {sidebarTotal} atividades</span></div></div><div className="sidebar-rule"><span>Regra do painel</span><p>Você não procura o que fazer. Abre, faz a próxima ação e marca.</p></div></aside>
-
-    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><div className="academic-year-chip"><span>{currentAcademicYear()}</span><small>ANO LETIVO</small></div>{studentYear && <button className={`grade-profile-button ${ownerAccount ? "owner-control" : "locked"}`} onClick={() => ownerAccount && setProfileOpen(true)} disabled={!ownerAccount} title={ownerAccount ? "Visualizar outra série" : "A série avança automaticamente a cada ano letivo"}><span>{schoolYears.find((item) => item.id === studentYear)?.short}</span><small>{ownerAccount ? "Visualizar série" : "Série automática"}</small></button>}<button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button><button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button></div></header>
+    <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">C</div><div><strong>Clareia</strong><span>Preparação ENEM</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "plan") setSelectedSubject("all"); setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>Mapa ENEM</strong><span>{sidebarDone} etapas concluídas</span></div></div><div className="sidebar-rule"><span>Regra da plataforma</span><p>Abra, siga o próximo passo e avance. Nada de perder tempo procurando o que estudar.</p></div></aside>
+    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><div className="academic-year-chip"><span>ENEM</span><small>{currentDate?.getFullYear() ?? ""}</small></div><button className="quick-add" onClick={() => setView("tasks")}>+ Planejar</button><button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button></div></header>
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {appSettings.announcementEnabled && appSettings.announcement.trim() && <div className="global-announcement"><strong>AVISO DO ADM</strong><span>{appSettings.announcement}</span></div>}
-      {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso ao painel foi pausado pelo ADM." : "O Lord está atualizando o painel."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso salvo continua seguro."}</p></div></div>}
+      {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso foi pausado pelo ADM." : "A plataforma está sendo atualizada."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso continua seguro."}</p></div></div>}
 
-      {view === "today" && studentYear && !isOwner(user?.email) && <div className="page-content grade-home"><section className="grade-home-hero"><div><span className="eyebrow">PAINEL PERSONALIZADO · {yearLabel(studentYear)}</span><h2>Seu conteúdo está na série certa.</h2><p>Escolha uma matéria, aprenda com a explicação e o exemplo e conclua o teste da própria aula. O painel salva tudo para você continuar depois.</p><div><button className="primary" onClick={() => setView("courses")}>Abrir material da série →</button>{isHighSchool(studentYear) && <button className="secondary" onClick={() => { setSelectedSubject("all"); setView("questions"); }}>Praticar para o ENEM →</button>}</div><div className="academic-auto-note"><span>{currentAcademicYear()}</span><p><strong>Ano letivo atual</strong> Em janeiro de {currentAcademicYear() + 1}, sua série avança automaticamente. Na 3ª série, o acesso permanece liberado.</p></div></div><aside><strong>{subjectsForYear(studentYear).length}</strong><span>matérias</span><strong>{subjectsForYear(studentYear).length * 10}</strong><span>aulas guiadas</span></aside></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">COMECE POR UMA MATÉRIA</span><h2>Trilhas do {yearLabel(studentYear)}</h2></div></div><div className="grade-home-grid">{subjectsForYear(studentYear).map((subject) => { const meta = schoolSubjectMeta[subject]; return <button key={subject} style={{ "--accent": meta.color } as React.CSSProperties} onClick={() => setView("courses")}><span>{meta.icon}</span><div><strong>{meta.name}</strong><small>Comece por {topicsFor(studentYear, subject)[0]}</small></div><b>→</b></button>; })}</div></section></div>}
-
-      {view === "today" && (isOwner(user?.email) || !studentYear) && <div className="page-content today-page"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMA AÇÃO</span>{todaySchedule.length ? <><h2>Hoje você só precisa começar.</h2><p>{todaySchedule.length === 1 ? "Uma sessão planejada" : `${todaySchedule.length} sessões planejadas`} para hoje. O conteúdo já está escolhido.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedLesson(nextBySubject[todaySchedule[0].subject])}>Abrir aula de agora →</button><span>Comece com 5 minutos</span></div></> : <><h2>Hoje é dia leve.</h2><p>Quarta, quinta e domingo ficam protegidos para culto, música e descanso. Se quiser adiantar algo, faça apenas o modo mínimo.</p><div className="hero-actions"><button className="primary" onClick={() => setView("tasks")}>Ver tarefas rápidas →</button><span>Sem criar dívida</span></div></>}</div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">{todaySchedule.length ? subjectById(todaySchedule[0].subject).icon : "✓"}</div></div></section>
-        <section className="section-block"><div className="section-heading"><div><span className="eyebrow">ROTEIRO DE HOJE</span><h2>Chegue e faça</h2></div><span className="muted">Nada para pesquisar</span></div><div className="today-grid">{todaySchedule.length ? todaySchedule.map((slot, index) => { const lesson = nextBySubject[slot.subject]; const subject = subjectById(slot.subject); return <article className="today-card" key={`${slot.time}-${slot.subject}`} style={{ "--accent": subject.color } as React.CSSProperties}><div className="time-column"><strong>{slot.time}</strong><span>{index + 1}</span></div><div className="today-card-body"><div className="card-kicker"><span className="subject-dot" />{subject.name} · aula {lesson.number}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p><div className="card-footer"><span>{lesson.duration}</span><button onClick={() => setSelectedLesson(lesson)}>Abrir aula →</button></div></div></article>; }) : <article className="empty-day"><strong>Sem aula obrigatória hoje</strong><p>Abra “Tarefas” se houver algo da escola. Caso contrário, cumpra seus compromissos e descanse.</p></article>}</div></section>
-        <section className="dashboard-split"><div className="section-block"><div className="section-heading"><div><span className="eyebrow">SUAS TRILHAS</span><h2>Próxima de cada matéria</h2></div><button className="text-button" onClick={() => { setSelectedSubject("all"); setView("courses"); }}>Abrir mapa completo</button></div><div className="course-mini-grid">{subjects.map((subject) => { const lesson = nextBySubject[subject.id]; const completed = lessons.filter((item) => item.subject === subject.id && progress[item.id] === "done").length; const total = lessons.filter((item) => item.subject === subject.id).length; return <button className="course-mini" key={subject.id} onClick={() => goToSubject(subject.id)} style={{ "--accent": subject.color } as React.CSSProperties}><span className="course-icon">{subject.icon}</span><div><strong>{subject.name}</strong><small>{lesson.title}</small><div className="mini-progress"><span style={{ width: `${(completed / total) * 100}%` }} /></div></div><b>{completed}/{total}</b></button>; })}</div></div><div className="section-block task-preview"><div className="section-heading"><div><span className="eyebrow">NÃO ESQUECER</span><h2>Tarefas abertas</h2></div><button className="text-button" onClick={() => setView("tasks")}>Gerenciar</button></div><div className="task-list compact">{tasks.filter((task) => !task.done).slice(0, 4).map((task) => <label className="task-row" key={task.id}><input type="checkbox" checked={task.done} onChange={() => toggleTask(task)} /><span><strong>{task.title}</strong><small>{task.category}{task.dueDate ? ` · ${task.dueDate.split("-").reverse().join("/")}` : ""}</small></span></label>)}{!tasks.some((task) => !task.done) && <div className="empty-list"><span>✓</span><p>Nenhuma tarefa esquecida.</p></div>}</div></div></section>
+      {view === "home" && <div className="page-content focus-home"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMO PASSO · ENEM</span><h2>Estude com foco no que realmente cai.</h2><p>Seu cronograma, 747 habilidades, provas antigas e 1.000 questões em uma única preparação.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedSkill(nextGlobalSkill)}>Continuar o cronograma →</button><span>{displayTopic(nextGlobalSkill)}</span></div></div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">E</div></div></section>
+        <section className="focus-stat-strip"><article><strong>747</strong><span>habilidades mapeadas</span></article><article><strong>{skillStageDoneCount}</strong><span>etapas concluídas</span></article><article><strong>{answeredCount}</strong><span>questões respondidas</span></article><article><strong>{Object.values(assessmentResults).filter((item) => item.date).length}</strong><span>provas registradas</span></article></section>
+        <section className="section-block"><div className="section-heading"><div><span className="eyebrow">ESCOLHA SUA AÇÃO</span><h2>Tudo do ENEM em três caminhos</h2></div></div><div className="home-priority-grid"><button onClick={() => { setSelectedSubject("all"); setView("plan"); }}><span>01</span><div><small>APRENDER</small><strong>Seguir o plano completo</strong><p>Conteúdos em ordem, do nivelamento ao domínio.</p></div><b>→</b></button><button onClick={() => setView("bank")}><span>02</span><div><small>PRATICAR</small><strong>Abrir as 1.000 questões</strong><p>Treino organizado pelo caderno SAME.</p></div><b>→</b></button><button onClick={() => { setSelectedSubject("exams"); setView("plan"); }}><span>03</span><div><small>MEDIR</small><strong>Registrar prova ou simulado</strong><p>Acompanhe acertos por área e tempo.</p></div><b>→</b></button></div></section>
+        <section className="dashboard-split"><div className="section-block"><div className="section-heading"><div><span className="eyebrow">MATÉRIAS DO ENEM</span><h2>Veja seu progresso</h2></div><button className="text-button" onClick={() => setView("plan")}>Abrir mapa completo</button></div><div className="course-mini-grid">{studySubjects.filter((subject) => isEnemSubject(subject.id)).map((subject) => { const id = subject.id as EnemSubjectId; const stats = getSubjectProgress(id); return <button className="course-mini" key={id} onClick={() => goToSubject(id)} style={{ "--accent": subject.color } as React.CSSProperties}><span className="course-icon">{subject.icon}</span><div><strong>{subject.name}</strong><small>{nextSkillFor(id)?.skill}</small><div className="mini-progress"><span style={{ width: `${stats.total ? (stats.done / stats.total) * 100 : 0}%` }} /></div></div><b>{stats.done}/{stats.total}</b></button>; })}</div></div><div className="section-block english-preview"><div className="section-heading"><div><span className="eyebrow">TRILHA PARALELA</span><h2>Inglês</h2></div><span className="build-badge">EM EXPANSÃO</span></div><div className="english-preview-card"><span>EN</span><h3>{nextEnglishLesson.title}</h3><p>A trilha básica continua disponível e receberá novas aulas com o tempo.</p><button className="primary" onClick={() => setView("english")}>Continuar inglês →</button></div></div></section>
       </div>}
 
-      {view === "courses" && studentYear && <div className="page-content courses-page"><SchoolCurriculum year={studentYear} progress={schoolLessonProgress} onCompleteLesson={completeSchoolLesson} /></div>}
-
-      {view === "questions" && studentYear && (isHighSchool(studentYear) || isOwner(user?.email)) && <div className="page-content enem-page"><nav className="enem-section-nav" aria-label="Seções do ENEM"><button className={selectedSubject === "all" ? "active" : ""} onClick={() => setSelectedSubject("all")}>Visão geral</button><button className={selectedSubject === "bank" ? "active" : ""} onClick={() => setSelectedSubject("bank")}>1.000 questões</button><button className={selectedSubject === "exams" ? "active" : ""} onClick={() => setSelectedSubject("exams")}>Provas e simulados</button></nav>{selectedSubject === "all" && renderSubjectHub()}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject === "bank" && <div className="enem-bank-wrap"><QuestionBank key={`${user?.uid ?? "local"}-${studentYear}-${questionFocus?.nonce ?? 0}`} schoolYear={studentYear} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} /></div>}{selectedSubject !== "all" && selectedSubject !== "exams" && selectedSubject !== "bank" && isEnemSubject(selectedSubject) && renderEnemCourse(selectedSubject)}</div>}
-
-      {view === "admin" && user && isOwner(user.email) && <AdminPanel user={user} onNotice={setNotice} />}
-
-      {view === "projects" && <div className="page-content"><section className="intro-row"><div><span className="eyebrow">APRENDER OLHANDO E MEXENDO</span><h2>Laboratório de projetos</h2><p>Você não vai fazer exercício aleatório. Cada etapa usa um projeto real, e o ChatGPT precisa explicar o que está construindo.</p></div></section><div className="roadmap">{projectRoadmap.map((project, index) => { const projectLessons = lessons.filter((lesson) => lesson.project === project.name); const completed = projectLessons.filter((lesson) => progress[lesson.id] === "done").length; return <article className="project-card" key={project.name}><div className="project-index">0{index + 1}</div><div className="project-head"><span>{project.weeks}</span><h3>{project.name}</h3><p>{project.result}</p></div><div className="project-progress"><div><span style={{ width: `${projectLessons.length ? (completed / projectLessons.length) * 100 : 0}%` }} /></div><small>{completed} de {projectLessons.length} etapas</small></div><div className="project-steps">{projectLessons.map((lesson) => <button key={lesson.id} onClick={() => setSelectedLesson(lesson)} className={progress[lesson.id] === "done" ? "done" : ""}><span>{progress[lesson.id] === "done" ? "✓" : lesson.number}</span>{lesson.title}</button>)}</div></article>; })}</div></div>}
-
-      {view === "tasks" && <div className="page-content tasks-page"><section className="intro-row"><div><span className="eyebrow">CAIXA DE ENTRADA</span><h2>Jogue aqui para não esquecer</h2><p>Prova, trabalho, prazo, ideia ou algo do projeto. O painel segura isso por você.</p></div></section><div className="task-layout"><form className="task-form" onSubmit={addTask}><label><span>O que precisa ser feito?</span><input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Ex.: terminar atividade de história" /></label><div className="form-grid"><label><span>Categoria</span><select value={taskCategory} onChange={(event) => setTaskCategory(event.target.value)}><option>Escola</option><option>Inglês</option><option>Matemática</option><option>Português</option><option>Ciências da Natureza</option><option>Humanas</option><option>Programação</option><option>Delícias da Vó</option><option>Grêmio</option><option>Pessoal</option></select></label><label><span>Prazo (se tiver)</span><input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} /></label></div><button className="primary" type="submit">Guardar tarefa</button></form><div className="task-board"><div className="section-heading"><div><span className="eyebrow">LISTA ATUAL</span><h2>{tasks.filter((task) => !task.done).length} abertas</h2></div></div><div className="task-list">{tasks.map((task) => <div className={`task-row full ${task.done ? "done" : ""}`} key={task.id}><label><input type="checkbox" checked={task.done} onChange={() => toggleTask(task)} /><span><strong>{task.title}</strong><small>{task.category}{task.dueDate ? ` · prazo ${task.dueDate.split("-").reverse().join("/")}` : ""}</small></span></label><button aria-label="Excluir tarefa" onClick={() => deleteTask(task)}>×</button></div>)}{!tasks.length && <div className="empty-list large"><span>＋</span><p>Guarde a primeira tarefa ao lado.</p></div>}</div></div></div></div>}
-
-      {view === "week" && <div className="page-content"><section className="intro-row"><div><span className="eyebrow">ROTINA AUTOMÁTICA</span><h2>Sua semana de estudos</h2><p>Treino pausado por enquanto. Quarta, quinta e domingo continuam leves.</p></div></section><div className="week-grid">{[1,2,3,4,5,6,0].map((day) => { const names = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]; const slots = weeklyPlan.filter((item) => item.day === day); const isToday = currentDate?.getDay() === day; return <article className={`day-card ${isToday ? "today" : ""}`} key={day}><div className="day-head"><span>{names[day].slice(0,3).toUpperCase()}</span><strong>{names[day]}</strong>{isToday && <small>HOJE</small>}</div><div className="day-slots">{slots.map((slot) => { const subject = subjectById(slot.subject); return <button key={`${slot.time}-${slot.subject}`} onClick={() => setSelectedLesson(nextBySubject[slot.subject])} style={{ "--accent": subject.color } as React.CSSProperties}><span>{slot.time}</span><strong>{slot.note}</strong><small>{nextBySubject[slot.subject].title}</small></button>; })}{!slots.length && <div className="rest-slot"><span>○</span><strong>{day === 3 ? "Culto" : day === 4 ? "Música" : "Descanso / igreja"}</strong><small>Sem reposição automática</small></div>}</div></article>; })}</div><div className="method-cards"><article><span>01</span><h3>Abra o painel</h3><p>A próxima aula já aparece. Não pesquise outro conteúdo.</p></article><article><span>02</span><h3>Faça 5 minutos</h3><p>Depois dos cinco, decida se continua. Normalmente você continua.</p></article><article><span>03</span><h3>Marque o resultado</h3><p>Feito avança. Não feito volta para a fila sem acumular dívida.</p></article></div></div>}
-
-      <nav className="mobile-nav" aria-label="Navegação no celular">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "questions") setSelectedSubject("all"); setView(item); }}><span>{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav>
+      {view === "plan" && <div className="page-content enem-page"><nav className="enem-section-nav" aria-label="Seções do plano"><button className={selectedSubject === "all" ? "active" : ""} onClick={() => setSelectedSubject("all")}>Mapa de matérias</button><button className={selectedSubject === "exams" ? "active" : ""} onClick={() => setSelectedSubject("exams")}>Provas e simulados</button></nav>{selectedSubject === "all" && renderSubjectHub()}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && renderEnemCourse(selectedSubject)}</div>}
+      {view === "bank" && <div className="page-content enem-page"><section className="bank-focus-head"><span className="eyebrow">PRÁTICA ENEM</span><h2>Banco de 1.000 questões</h2><p>Resolva, registre sua resposta e retome exatamente de onde parou.</p></section><div className="enem-bank-wrap"><QuestionBank key={`${user.uid}-${questionFocus?.nonce ?? 0}`} schoolYear="3em" progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} /></div></div>}
+      {view === "english" && <div className="page-content english-page"><section className="english-launch"><div><span className="eyebrow">TRILHA PARALELA · EM CONSTRUÇÃO CONTÍNUA</span><h2>Inglês sem atrapalhar o foco no ENEM.</h2><p>O módulo inicial continua ativo. Vamos acrescentar novas aulas, explicações e testes aos poucos.</p><div><strong>{englishLessons.filter((lesson) => progress[lesson.id] === "done").length}</strong><span>de {englishLessons.length} aulas concluídas</span></div></div><span className="english-launch-mark">EN</span></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">MÓDULO ATUAL</span><h2>Fundamentos de inglês</h2></div><span className="build-badge">FASE 1</span></div><div className="lesson-list">{englishLessons.map((lesson) => { const status = progress[lesson.id] ?? "pending"; return <article className={`lesson-row ${status}`} key={lesson.id} style={{ "--accent": subjectById("english").color } as React.CSSProperties}><div className="lesson-number">{status === "done" ? "✓" : lesson.number}</div><div className="lesson-main"><div className="card-kicker">INGLÊS · SEMANA {lesson.week}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p></div><div className="lesson-meta"><span>{lesson.duration}</span>{status === "not_done" && <small>Continua na fila</small>}<button onClick={() => setSelectedLesson(lesson)}>{status === "done" ? "Rever" : "Abrir"} →</button></div></article>; })}</div></section></div>}
+      {view === "tasks" && <div className="page-content tasks-page"><section className="intro-row"><div><span className="eyebrow">PLANEJAMENTO PESSOAL</span><h2>Organize o próximo estudo</h2><p>Guarde revisão, simulado, redação ou qualquer prazo importante.</p></div></section><div className="task-layout"><form className="task-form" onSubmit={addTask}><label><span>O que precisa ser feito?</span><input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Ex.: revisar porcentagem e resolver 10 questões" /></label><div className="form-grid"><label><span>Categoria</span><select value={taskCategory} onChange={(event) => setTaskCategory(event.target.value)}><option>ENEM</option><option>Matemática</option><option>Linguagens</option><option>Redação</option><option>Ciências da Natureza</option><option>Ciências Humanas</option><option>Simulado</option><option>Inglês</option></select></label><label><span>Prazo (se tiver)</span><input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} /></label></div><button className="primary" type="submit">Guardar planejamento</button></form><div className="task-board"><div className="section-heading"><div><span className="eyebrow">LISTA ATUAL</span><h2>{tasks.filter((task) => !task.done).length} pendentes</h2></div></div><div className="task-list">{tasks.map((task) => <div className={`task-row full ${task.done ? "done" : ""}`} key={task.id}><label><input type="checkbox" checked={task.done} onChange={() => toggleTask(task)} /><span><strong>{task.title}</strong><small>{task.category}{task.dueDate ? ` · prazo ${task.dueDate.split("-").reverse().join("/")}` : ""}</small></span></label><button aria-label="Excluir planejamento" onClick={() => deleteTask(task)}>×</button></div>)}{!tasks.length && <div className="empty-list large"><span>＋</span><p>Guarde seu primeiro estudo ao lado.</p></div>}</div></div></div></div>}
+      {view === "admin" && isOwner(user.email) && <AdminPanel user={user} onNotice={setNotice} />}
+      <nav className="mobile-nav" aria-label="Navegação no celular">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "plan") setSelectedSubject("all"); setView(item); }}><span>{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav>
     </section>
 
-    {selectedLesson && <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedLesson(null)}><section className="lesson-modal" role="dialog" aria-modal="true" aria-label={`Aula: ${selectedLesson.title}`} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent": subjectById(selectedLesson.subject).color } as React.CSSProperties}><button className="modal-close" aria-label="Fechar" onClick={() => setSelectedLesson(null)}>×</button><div className="modal-top"><span className="lesson-badge">{subjectById(selectedLesson.subject).icon}</span><div><span className="eyebrow">{subjectById(selectedLesson.subject).name} · AULA {selectedLesson.number} · SEMANA {selectedLesson.week}</span><h2>{selectedLesson.title}</h2><p>{selectedLesson.goal}</p></div></div>{selectedLesson.project && <div className="project-label">Projeto: <strong>{selectedLesson.project}</strong></div>}<div className="lesson-plan"><div className="plan-heading"><span>ROTEIRO DA AULA</span><small>{selectedLesson.duration}</small></div>{selectedLesson.steps.map((step, index) => <div className="plan-step" key={step}><span>{index + 1}</span><p>{step}</p></div>)}</div><div className="expected-result"><span>RESULTADO DE HOJE</span><p>{selectedLesson.result}</p></div><div className="chat-box"><div><strong>Estudar com o ChatGPT</strong><p>A mensagem já pede explicação, exemplos e conferência do resultado.</p></div><button onClick={() => copyText(selectedLesson.chatPrompt)}>Copiar mensagem</button></div><div className="modal-actions"><button className="secondary danger" onClick={() => setLessonStatus(selectedLesson, "not_done")}>Não fiz</button><button className="secondary" onClick={() => setLessonStatus(selectedLesson, "pending")}>Deixar na fila</button><button className="primary success" onClick={() => { if (appSettings.assessmentsEnabled) setMasteryLesson(selectedLesson); else { setLessonStatus(selectedLesson, "done"); setSelectedLesson(null); } }}>Concluir com check ✓</button></div></section></div>}
-
-    {selectedSkill && <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedSkill(null)}><section className="lesson-modal skill-modal" role="dialog" aria-modal="true" aria-label={`Estudar: ${selectedSkill.skill}`} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent": subjectById(selectedSkill.subject).color } as React.CSSProperties}><button className="modal-close" aria-label="Fechar" onClick={() => setSelectedSkill(null)}>×</button><div className="modal-top"><span className="lesson-badge">{subjectById(selectedSkill.subject).icon}</span><div><span className="eyebrow">{subjectById(selectedSkill.subject).name} · {selectedSkill.level} · {displayTopic(selectedSkill)}</span><h2>{selectedSkill.skill}</h2><p>{selectedSkill.relevance}</p></div></div><div className="skill-study-plan"><article><span>1</span><div><strong>Teoria</strong><p>Peça uma explicação simples, exemplos e os erros mais comuns.</p></div></article><article><span>2</span><div><strong>Prática</strong><p>Resolva questões em dificuldade crescente com correção explicada.</p></div></article><article><span>3</span><div><strong>Domínio</strong><p>Faça uma questão sem ajuda e explique o raciocínio com suas palavras.</p></div></article></div><div className="chat-box skill-prompt"><div><strong>Mensagem pronta para o ChatGPT</strong><p>“Quero estudar {selectedSkill.skill}, do tópico {displayTopic(selectedSkill)} em {subjectById(selectedSkill.subject).name}. Explique do zero em linguagem simples, mostre exemplos, depois me passe exercícios graduais e só revele a resposta após minha tentativa. No final, teste se eu realmente dominei e corrija meu raciocínio.”</p></div><button onClick={() => copyText(`Quero estudar ${selectedSkill.skill}, do tópico ${displayTopic(selectedSkill)} em ${subjectById(selectedSkill.subject).name}. Explique do zero em linguagem simples, mostre exemplos, depois me passe exercícios graduais e só revele a resposta após minha tentativa. No final, teste se eu realmente dominei e corrija meu raciocínio.`)}>Copiar mensagem</button></div>{hasQuestionBank(selectedSkill.subject) && <button className="question-recommend-button" onClick={() => openQuestionForSkill(selectedSkill)}><span>?</span><div><strong>Resolver uma questão deste assunto</strong><small>O caderno escolhe uma que você ainda não respondeu.</small></div><b>→</b></button>}<div className="modal-stage-actions">{stages.map((stage) => <button key={stage.id} className={skillProgress[selectedSkill.id]?.[stage.id] ? "done" : ""} onClick={() => requestSkillStage(selectedSkill, stage.id)}><span>{skillProgress[selectedSkill.id]?.[stage.id] ? "✓" : stage.short}</span>{stage.label}</button>)}</div></section></div>}
-
-    {masteryLesson && <MasteryCheck question={lessonMastery[masteryLesson.id]} title={`${subjectById(masteryLesson.subject).name} · ${masteryLesson.title}`} onClose={() => setMasteryLesson(null)} onPass={() => { setLessonStatus(masteryLesson, "done"); setMasteryLesson(null); setSelectedLesson(null); }} />}
-
+    {selectedLesson && <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedLesson(null)}><section className="lesson-modal" role="dialog" aria-modal="true" aria-label={`Aula: ${selectedLesson.title}`} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent": subjectById("english").color } as React.CSSProperties}><button className="modal-close" aria-label="Fechar" onClick={() => setSelectedLesson(null)}>×</button><div className="modal-top"><span className="lesson-badge">EN</span><div><span className="eyebrow">INGLÊS · AULA {selectedLesson.number} · SEMANA {selectedLesson.week}</span><h2>{selectedLesson.title}</h2><p>{selectedLesson.goal}</p></div></div><div className="lesson-plan"><div className="plan-heading"><span>ROTEIRO DA AULA</span><small>{selectedLesson.duration}</small></div>{selectedLesson.steps.map((step, index) => <div className="plan-step" key={step}><span>{index + 1}</span><p>{step}</p></div>)}</div><div className="expected-result"><span>RESULTADO DE HOJE</span><p>{selectedLesson.result}</p></div><div className="chat-box"><div><strong>Estudar com o ChatGPT</strong><p>A mensagem já pede explicação, exemplos e conferência.</p></div><button onClick={() => copyText(selectedLesson.chatPrompt)}>Copiar mensagem</button></div><div className="modal-actions"><button className="secondary danger" onClick={() => setLessonStatus(selectedLesson, "not_done")}>Deixar na fila</button><button className="primary success" onClick={() => { const check = lessonMastery[selectedLesson.id]; if (appSettings.assessmentsEnabled && check) setMasteryLesson(selectedLesson); else { setLessonStatus(selectedLesson, "done"); setSelectedLesson(null); } }}>Concluir com check ✓</button></div></section></div>}
+    {selectedSkill && <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedSkill(null)}><section className="lesson-modal skill-modal" role="dialog" aria-modal="true" aria-label={`Estudar: ${selectedSkill.skill}`} onMouseDown={(event) => event.stopPropagation()} style={{ "--accent": subjectById(selectedSkill.subject).color } as React.CSSProperties}><button className="modal-close" aria-label="Fechar" onClick={() => setSelectedSkill(null)}>×</button><div className="modal-top"><span className="lesson-badge">{subjectById(selectedSkill.subject).icon}</span><div><span className="eyebrow">{subjectById(selectedSkill.subject).name} · {selectedSkill.level} · {displayTopic(selectedSkill)}</span><h2>{selectedSkill.skill}</h2><p>{selectedSkill.relevance}</p></div></div><div className="skill-study-plan"><article><span>1</span><div><strong>Teoria</strong><p>Peça uma explicação simples e exemplos.</p></div></article><article><span>2</span><div><strong>Prática</strong><p>Resolva questões em dificuldade crescente.</p></div></article><article><span>3</span><div><strong>Domínio</strong><p>Faça uma questão sem ajuda e explique o raciocínio.</p></div></article></div><div className="chat-box skill-prompt"><div><strong>Mensagem pronta para o ChatGPT</strong><p>“Quero estudar {selectedSkill.skill}, do tópico {displayTopic(selectedSkill)} em {subjectById(selectedSkill.subject).name}. Explique do zero, mostre exemplos e depois teste meu domínio.”</p></div><button onClick={() => copyText(`Quero estudar ${selectedSkill.skill}, do tópico ${displayTopic(selectedSkill)} em ${subjectById(selectedSkill.subject).name}. Explique do zero em linguagem simples, mostre exemplos e depois me passe exercícios graduais.`)}>Copiar mensagem</button></div>{hasQuestionBank(selectedSkill.subject) && <button className="question-recommend-button" onClick={() => openQuestionForSkill(selectedSkill)}><span>?</span><div><strong>Resolver uma questão deste assunto</strong><small>O caderno escolhe uma que você ainda não respondeu.</small></div><b>→</b></button>}<div className="modal-stage-actions">{stages.map((stage) => <button key={stage.id} className={skillProgress[selectedSkill.id]?.[stage.id] ? "done" : ""} onClick={() => requestSkillStage(selectedSkill, stage.id)}><span>{skillProgress[selectedSkill.id]?.[stage.id] ? "✓" : stage.short}</span>{stage.label}</button>)}</div></section></div>}
+    {masteryLesson && lessonMastery[masteryLesson.id] && <MasteryCheck question={lessonMastery[masteryLesson.id]} title={`Inglês · ${masteryLesson.title}`} onClose={() => setMasteryLesson(null)} onPass={() => { setLessonStatus(masteryLesson, "done"); setMasteryLesson(null); setSelectedLesson(null); }} />}
     {masterySkill && <MasteryCheck question={skillMasteryQuestion(masterySkill.subject, masterySkill.skill)} title={`${subjectById(masterySkill.subject).name} · ${masterySkill.skill}`} onClose={() => setMasterySkill(null)} onPass={() => { toggleSkillStage(masterySkill, "mastery"); setMasterySkill(null); setSelectedSkill(null); }} />}
-
-    {!loading && ownerAccount && profileOpen && <StudentProfileSetup user={user} current={studentYear} onSelect={(year) => void selectSchoolYear(year)} onClose={() => setProfileOpen(false)} />}
-
-    {loading && <div className="loading-screen"><div className="loader"/><span>Organizando seu próximo passo...</span></div>}
+    {loading && <div className="loading-screen"><div className="loader"/><span>Organizando sua preparação...</span></div>}
   </main>;
 }

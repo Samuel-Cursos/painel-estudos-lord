@@ -12,8 +12,6 @@ service cloud.firestore {
     function canReadProtectedPdf() {
       return isOwner()
         || (signedIn()
-          && exists(/databases/$(database)/documents/studentProfiles/$(request.auth.uid))
-          && get(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.registrationComplete == true
           && exists(/databases/$(database)/documents/pdfAccess/$(request.auth.uid))
           && get(/databases/$(database)/documents/pdfAccess/$(request.auth.uid)).data.enabled == true);
     }

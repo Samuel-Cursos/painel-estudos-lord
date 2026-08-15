@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Painel de Estudos do Lord",
-  description: "Rotina, aulas, tarefas e projetos de estudo de Samuel Alves.",
+  title: "Clareia | Preparação ENEM",
+  description: "Cronograma completo do ENEM, 1.000 questões, provas, simulados e uma trilha de inglês em expansão.",
   other: {
     "codex-preview": "development",
   },

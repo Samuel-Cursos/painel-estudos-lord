@@ -2,20 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
-import { Bytes, addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
+import { Bytes, addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { defaultAppSettings, isOwner, PDF_CHUNK_SIZE, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC, type AppSettings } from "./access-control";
 import { firestore } from "./firebase-client";
 import { practiceSubjectNames, practiceSubjectOrder, type CustomPracticeQuestion } from "./practice-library";
-import { schoolYears, yearLabel, type SchoolYear } from "./school-data";
-import { currentAcademicYear, currentSchoolYear, isInstitutionalEmail, normalizeRa, normalizeRaDigit, type StudentProfile } from "./student-profile";
 
 type DirectoryUser = { uid: string; email: string; displayName?: string; photoURL?: string; lastSeenAt?: { toDate?: () => Date } };
 type UserMetrics = { lessons: number; stages: number; questions: number; openTasks: number; updatedAt?: { toDate?: () => Date } };
 type AdminTab = "overview" | "users" | "content" | "settings";
 type AuditEntry = { id: string; action: string; detail: string; createdAt?: { toDate?: () => Date } };
 type QuestionDraft = { subject: string; prompt: string; options: string; correct: number; explanation: string; written: boolean };
-type StoredStudentProfile = Partial<StudentProfile> & { uid: string; email: string };
-type ProfileEditor = { person: DirectoryUser; profile: StoredStudentProfile };
+type StoredStudentProfile = { uid: string; email: string; name?: string };
 
 type Props = { user: User; onNotice: (message: string) => void };
 const emptyDraft: QuestionDraft = { subject: "portuguese", prompt: "", options: "\n\n\n", correct: 0, explanation: "", written: false };
@@ -30,7 +27,6 @@ export default function AdminPanel({ user, onNotice }: Props) {
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [metrics, setMetrics] = useState<Record<string, UserMetrics>>({});
   const [studentProfiles, setStudentProfiles] = useState<Record<string, StoredStudentProfile>>({});
-  const [profileEditor, setProfileEditor] = useState<ProfileEditor | null>(null);
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
@@ -86,7 +82,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
 
   useEffect(() => { const timer = window.setTimeout(() => void loadAdmin(), 0); return () => window.clearTimeout(timer); }, [loadAdmin]);
 
-  const filteredUsers = useMemo(() => { const query = search.trim().toLocaleLowerCase("pt-BR"); return users.filter((item) => { const profile = studentProfiles[item.uid]; return !query || `${item.email} ${item.displayName ?? ""} ${profile?.name ?? ""} ${profile?.institutionalEmail ?? ""} ${profile?.ra ?? ""}`.toLocaleLowerCase("pt-BR").includes(query); }); }, [search, studentProfiles, users]);
+  const filteredUsers = useMemo(() => { const query = search.trim().toLocaleLowerCase("pt-BR"); return users.filter((item) => { const profile = studentProfiles[item.uid]; return !query || `${item.email} ${item.displayName ?? ""} ${profile?.name ?? ""}`.toLocaleLowerCase("pt-BR").includes(query); }); }, [search, studentProfiles, users]);
   const totals = useMemo(() => Object.values(metrics).reduce((result, item) => ({ lessons: result.lessons + item.lessons, stages: result.stages + item.stages, questions: result.questions + item.questions, tasks: result.tasks + item.openTasks }), { lessons: 0, stages: 0, questions: 0, tasks: 0 }), [metrics]);
 
   async function toggleAccess(person: DirectoryUser) {
@@ -109,79 +105,6 @@ export default function AdminPanel({ user, onNotice }: Props) {
     const nextBlocked = new Set(blocked); const willBlock = !nextBlocked.has(person.uid);
     try { await setDoc(doc(firestore, "userControls", person.uid), { siteEnabled: !willBlock, updatedAt: serverTimestamp(), updatedBy: user.email }, { merge: true }); if (willBlock) nextBlocked.add(person.uid); else nextBlocked.delete(person.uid); setBlocked(nextBlocked); await logAction(willBlock ? "Painel bloqueado" : "Painel liberado", person.email); onNotice(`${person.email}: painel ${willBlock ? "bloqueado" : "liberado"}.`); }
     catch { onNotice("Não consegui alterar o acesso ao painel."); }
-  }
-
-  function editStudentProfile(person: DirectoryUser) {
-    const stored = studentProfiles[person.uid];
-    setProfileEditor({ person, profile: {
-      uid: person.uid,
-      email: person.email,
-      name: stored?.name ?? person.displayName ?? "",
-      institutionalEmail: stored?.institutionalEmail ?? "",
-      ra: stored?.ra ?? "",
-      raKey: stored?.raKey ?? stored?.ra ?? "",
-      raDigit: stored?.raDigit ?? "",
-      entrySchoolYear: stored?.entrySchoolYear ?? stored?.schoolYear ?? "6ef",
-      schoolYear: stored?.entrySchoolYear ?? stored?.schoolYear ?? "6ef",
-      entryAcademicYear: stored?.entryAcademicYear ?? currentAcademicYear(),
-      registrationComplete: stored?.registrationComplete,
-    } });
-  }
-
-  async function saveStudentProfile() {
-    if (!profileEditor) return;
-    const { person } = profileEditor;
-    const draft = profileEditor.profile;
-    const raKey = normalizeRa(draft.ra ?? "");
-    const raDigit = normalizeRaDigit(draft.raDigit ?? "");
-    const entrySchoolYear = draft.entrySchoolYear as SchoolYear;
-    if ((draft.name ?? "").trim().length < 3 || raKey.length < 5 || !raDigit || !isInstitutionalEmail(draft.institutionalEmail ?? "") || !schoolYears.some((year) => year.id === entrySchoolYear)) return onNotice("Confira nome, RA, dígito, e-mail institucional e série.");
-    setSaving(true);
-    try {
-      const targetRegistry = doc(firestore, "studentRaRegistry", raKey);
-      const targetSnapshot = await getDoc(targetRegistry);
-      if (targetSnapshot.exists() && targetSnapshot.data().uid !== person.uid) return onNotice("Esse RA já pertence a outro usuário.");
-      const previousRaKey = normalizeRa(studentProfiles[person.uid]?.raKey ?? studentProfiles[person.uid]?.ra ?? "");
-      const profile: StudentProfile = {
-        uid: person.uid,
-        email: person.email,
-        name: (draft.name ?? "").trim(),
-        institutionalEmail: (draft.institutionalEmail ?? "").trim().toLocaleLowerCase("pt-BR"),
-        ra: raKey,
-        raKey,
-        raDigit,
-        entrySchoolYear,
-        schoolYear: entrySchoolYear,
-        entryAcademicYear: Number(draft.entryAcademicYear) || currentAcademicYear(),
-        registrationComplete: true,
-      };
-      const batch = writeBatch(firestore);
-      if (previousRaKey && previousRaKey !== raKey) batch.delete(doc(firestore, "studentRaRegistry", previousRaKey));
-      batch.set(targetRegistry, { uid: person.uid, raKey, raDigit, updatedAt: serverTimestamp(), updatedBy: user.email });
-      batch.set(doc(firestore, "studentProfiles", person.uid), { ...profile, updatedAt: serverTimestamp(), updatedBy: user.email }, { merge: true });
-      await batch.commit();
-      setStudentProfiles((current) => ({ ...current, [person.uid]: profile }));
-      setProfileEditor(null);
-      await logAction("Cadastro escolar corrigido", `${person.email} · RA ${raKey}-${raDigit} · ${yearLabel(currentSchoolYear(profile))}`);
-      onNotice("Cadastro escolar atualizado pelo ADM.");
-    } catch { onNotice("Não consegui salvar. Confira se o RA é único e publique as regras novas."); }
-    finally { setSaving(false); }
-  }
-
-  async function resetStudentRegistration(person: DirectoryUser) {
-    const profile = studentProfiles[person.uid];
-    if (!window.confirm(`Liberar o RA e exigir um novo cadastro de ${person.email}?`)) return;
-    try {
-      const batch = writeBatch(firestore);
-      const raKey = normalizeRa(profile?.raKey ?? profile?.ra ?? "");
-      if (raKey) batch.delete(doc(firestore, "studentRaRegistry", raKey));
-      batch.delete(doc(firestore, "studentProfiles", person.uid));
-      batch.set(doc(firestore, "userControls", person.uid), { profileResetToken: Date.now(), updatedAt: serverTimestamp(), updatedBy: user.email }, { merge: true });
-      await batch.commit();
-      setStudentProfiles((current) => { const next = { ...current }; delete next[person.uid]; return next; });
-      await logAction("Cadastro escolar liberado", person.email);
-      onNotice("RA liberado. No próximo acesso, a pessoa fará o cadastro novamente.");
-    } catch { onNotice("Não consegui liberar esse cadastro."); }
   }
 
   async function saveSettings(next: AppSettings) {
@@ -226,10 +149,10 @@ export default function AdminPanel({ user, onNotice }: Props) {
 
   if (!isOwner(user.email)) return null;
   return <div className="page-content admin-page">
-    <section className="admin-hero"><div><span className="eyebrow">CENTRAL DO LORD</span><h2>Controle total do painel</h2><p>Monitore pessoas e progresso, publique questões, controle o material protegido e altere o funcionamento do site sem mexer no código.</p></div><button className="secondary" onClick={() => void loadAdmin()}>↻ Atualizar dados</button></section>
+    <section className="admin-hero"><div><span className="eyebrow">CENTRAL CLAREIA</span><h2>Controle da preparação ENEM</h2><p>Monitore usuários e progresso, publique questões, controle o caderno protegido e altere o funcionamento da plataforma.</p></div><button className="secondary" onClick={() => void loadAdmin()}>↻ Atualizar dados</button></section>
     <nav className="admin-tabs">{(["overview", "users", "content", "settings"] as AdminTab[]).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "overview" ? "Visão geral" : item === "users" ? "Usuários" : item === "content" ? "Conteúdo" : "Site e regras"}</button>)}</nav>
 
-    {tab === "overview" && <><div className="admin-stats admin-stats-wide"><article><strong>{users.length}</strong><span>pessoas cadastradas</span></article><article><strong>{totals.lessons + totals.stages}</strong><span>etapas concluídas</span></article><article><strong>{totals.questions}</strong><span>questões respondidas</span></article><article><strong>{totals.tasks}</strong><span>tarefas abertas</span></article></div><section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LIVE</span><div><span className="eyebrow">SAÚDE DO SITE</span><h3>Serviços e recursos</h3></div></div><div className="admin-health"><span className="ok">Online</span><p>Login Google e sincronização pelo Firestore</p><span className={settings.publicPracticeEnabled ? "ok" : "paused"}>{settings.publicPracticeEnabled ? "Ativo" : "Pausado"}</span><p>Banco geral de todas as matérias</p><span className={settings.pdfEnabled ? "ok" : "paused"}>{settings.pdfEnabled ? "Ativo" : "Pausado"}</span><p>PDF protegido em partes no Firestore</p></div></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LOG</span><div><span className="eyebrow">HISTÓRICO DO ADM</span><h3>Últimas ações</h3></div></div><div className="audit-list">{audit.length ? audit.map((item) => <div key={item.id}><strong>{item.action}</strong><span>{item.detail}</span><small>{timestampLabel(item.createdAt)}</small></div>) : <p>Nenhuma ação registrada ainda.</p>}</div></article></section></>}
+    {tab === "overview" && <><div className="admin-stats admin-stats-wide"><article><strong>{users.length}</strong><span>pessoas cadastradas</span></article><article><strong>{totals.lessons + totals.stages}</strong><span>etapas concluídas</span></article><article><strong>{totals.questions}</strong><span>questões respondidas</span></article><article><strong>{totals.tasks}</strong><span>tarefas abertas</span></article></div><section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LIVE</span><div><span className="eyebrow">SAÚDE DO SITE</span><h3>Serviços e recursos</h3></div></div><div className="admin-health"><span className="ok">Online</span><p>Login Google e sincronização pelo Firestore</p><span className={settings.publicPracticeEnabled ? "ok" : "paused"}>{settings.publicPracticeEnabled ? "Ativo" : "Pausado"}</span><p>Banco de questões e prática do ENEM</p><span className={settings.pdfEnabled ? "ok" : "paused"}>{settings.pdfEnabled ? "Ativo" : "Pausado"}</span><p>Caderno protegido com acesso definido pelo ADM</p></div></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LOG</span><div><span className="eyebrow">HISTÓRICO DO ADM</span><h3>Últimas ações</h3></div></div><div className="audit-list">{audit.length ? audit.map((item) => <div key={item.id}><strong>{item.action}</strong><span>{item.detail}</span><small>{timestampLabel(item.createdAt)}</small></div>) : <p>Nenhuma ação registrada ainda.</p>}</div></article></section></>}
 
     {tab === "users" && <section className="section-block admin-users">
       <div className="section-heading"><div><span className="eyebrow">MONITORAMENTO E ACESSO</span><h2>Todos os usuários</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" /></div>
@@ -239,23 +162,21 @@ export default function AdminPanel({ user, onNotice }: Props) {
         const isBlocked = !owner && blocked.has(person.uid);
         const data = metrics[person.uid] ?? { lessons: 0, stages: 0, questions: 0, openTasks: 0 };
         const profile = studentProfiles[person.uid];
-        const activeYear = profile?.entrySchoolYear && profile.entryAcademicYear ? currentSchoolYear({ entrySchoolYear: profile.entrySchoolYear, entryAcademicYear: profile.entryAcademicYear }) : profile?.schoolYear;
         return <article key={person.uid}>
           <div className="admin-avatar">{(person.displayName || person.email).slice(0, 1).toUpperCase()}</div>
           <div><strong>{profile?.name || person.displayName || "Usuário"}</strong><small>{person.email}</small><em>Visto: {timestampLabel(person.lastSeenAt)}</em></div>
-          <div className="student-admin-data"><span>{profile?.registrationComplete ? "CADASTRO COMPLETO" : "CADASTRO PENDENTE"}</span><strong>{profile?.ra ? `RA ${profile.ra}-${profile.raDigit}` : "RA não informado"}</strong><small>{profile?.institutionalEmail || "E-mail institucional não informado"}</small></div>
-          <div className="student-current-year"><small>ANO LETIVO {currentAcademicYear()}</small><strong>{activeYear ? yearLabel(activeYear) : "Série pendente"}</strong></div>
+          <div className="student-admin-data"><span>PERFIL ENEM</span><strong>Acesso pelo Google</strong><small>Sem RA, série ou cadastro escolar obrigatório</small></div>
+          <div className="student-current-year"><small>PREPARAÇÃO</small><strong>ENEM + Inglês</strong></div>
           <div className="user-mini-metrics"><span><b>{data.lessons + data.stages}</b> etapas</span><span><b>{data.questions}</b> questões</span><span><b>{data.openTasks}</b> tarefas</span></div>
           <span className={isBlocked ? "access-blocked" : enabled ? "access-on" : "access-off"}>{owner ? "Dono · tudo liberado" : isBlocked ? "Painel bloqueado" : enabled ? "PDF liberado" : "Versão em texto"}</span>
-          <div className="user-admin-actions"><button className="primary" onClick={() => editStudentProfile(person)}>Editar cadastro</button><button disabled={owner} className={enabled ? "danger" : "primary"} onClick={() => void toggleAccess(person)}>{owner ? "PDF permanente" : enabled ? "Remover PDF" : "Liberar PDF"}</button><button disabled={owner} className={isBlocked ? "primary" : "danger-outline"} onClick={() => void toggleSiteAccess(person)}>{isBlocked ? "Liberar painel" : "Bloquear painel"}</button><button className="danger-outline" onClick={() => void resetProgress(person)}>Zerar progresso</button><button disabled={owner} className="danger-outline" onClick={() => void resetStudentRegistration(person)}>Liberar RA / refazer cadastro</button></div>
+          <div className="user-admin-actions"><button disabled={owner} className={enabled ? "danger" : "primary"} onClick={() => void toggleAccess(person)}>{owner ? "PDF permanente" : enabled ? "Remover PDF" : "Liberar PDF"}</button><button disabled={owner} className={isBlocked ? "primary" : "danger-outline"} onClick={() => void toggleSiteAccess(person)}>{isBlocked ? "Liberar painel" : "Bloquear painel"}</button><button className="danger-outline" onClick={() => void resetProgress(person)}>Zerar progresso</button></div>
         </article>;
       })}</div>}
     </section>}
 
     {tab === "content" && <><section className="admin-grid"><article className="admin-card pdf-admin-card"><div className="admin-card-head"><span className="admin-card-icon">PDF</span><div><span className="eyebrow">MATERIAL PROTEGIDO</span><h3>Caderno SAME</h3></div></div><p>{pdfInfo}</p><label className={`upload-button ${uploading ? "disabled" : ""}`}><input type="file" accept="application/pdf" disabled={uploading} onChange={(event) => void uploadPdf(event.target.files?.[0])} /><span>{uploading ? `Enviando… ${uploadProgress}%` : "Enviar ou substituir PDF"}</span></label><small>Continua gratuito: o arquivo fica dividido em partes no Firestore, fora do GitHub e da Vercel.</small></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">+Q</span><div><span className="eyebrow">EDITOR DE QUESTÕES</span><h3>Publicar nova questão</h3></div></div><div className="question-editor"><label>Matéria<select value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })}>{practiceSubjectOrder.map((id) => <option value={id} key={id}>{practiceSubjectNames[id]}</option>)}</select></label><label>Enunciado<textarea value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} placeholder="Digite a pergunta…" /></label><label className="inline-check"><input type="checkbox" checked={draft.written} onChange={(event) => setDraft({ ...draft, written: event.target.checked })} /> Resposta escrita</label>{!draft.written && <><label>Alternativas (uma por linha)<textarea value={draft.options} onChange={(event) => setDraft({ ...draft, options: event.target.value })} placeholder={"Alternativa A\nAlternativa B\nAlternativa C\nAlternativa D"} /></label><label>Alternativa correta<select value={draft.correct} onChange={(event) => setDraft({ ...draft, correct: Number(event.target.value) })}>{[0,1,2,3,4].map((value) => <option value={value} key={value}>{String.fromCharCode(65 + value)}</option>)}</select></label></>}<label>Correção / explicação<textarea value={draft.explanation} onChange={(event) => setDraft({ ...draft, explanation: event.target.value })} placeholder="Explique por que essa é a resposta…" /></label><button className="primary" disabled={saving} onClick={() => void createQuestion()}>Publicar para todos</button></div></article></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">CONTEÚDO CRIADO NO ADM</span><h2>{customQuestions.length} questões personalizadas</h2></div></div><div className="custom-question-list">{customQuestions.map((question) => <article key={question.id}><span>{practiceSubjectNames[question.subject]}</span><strong>{question.prompt}</strong><small>{question.written ? "Resposta escrita" : `${question.options?.length ?? 0} alternativas`}</small><button onClick={() => void removeQuestion(question)}>Excluir</button></article>)}{!customQuestions.length && <div className="question-empty"><strong>Nenhuma personalizada ainda.</strong><p>As 55 questões incluídas no código já estão publicadas.</p></div>}</div></section></>}
 
-    {tab === "settings" && <section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">⚙</span><div><span className="eyebrow">FUNCIONAMENTO</span><h3>Controles gerais</h3></div></div>{([{ key: "assessmentsEnabled", title: "Check antes de concluir", detail: "Exige resposta nas aulas e no estágio Domínio." }, { key: "publicPracticeEnabled", title: "Banco geral de questões", detail: "Exibe as questões corrigidas das 11 matérias." }, { key: "pdfEnabled", title: "PDF protegido ativo", detail: "Permite abrir o caderno para usuários autorizados." }, { key: "maintenanceMode", title: "Modo manutenção", detail: "Bloqueia temporariamente o painel para todos, menos você." }] as const).map((item) => <label className="admin-toggle" key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><input type="checkbox" checked={settings[item.key]} onChange={(event) => void saveSettings({ ...settings, [item.key]: event.target.checked })} /></label>)}</article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">MSG</span><div><span className="eyebrow">COMUNICAÇÃO</span><h3>Aviso e meta diária</h3></div></div><div className="question-editor"><label className="inline-check"><input type="checkbox" checked={settings.announcementEnabled} onChange={(event) => setSettings({ ...settings, announcementEnabled: event.target.checked })} /> Mostrar aviso para todos</label><label>Mensagem<textarea value={settings.announcement} onChange={(event) => setSettings({ ...settings, announcement: event.target.value })} placeholder="Ex.: Simulado novo disponível sábado." /></label><label>Meta diária de questões<input type="number" min="1" max="100" value={settings.dailyQuestionGoal} onChange={(event) => setSettings({ ...settings, dailyQuestionGoal: Math.max(1, Math.min(100, Number(event.target.value) || 1)) })} /></label><button className="primary" disabled={saving} onClick={() => void saveSettings(settings)}>Salvar e publicar</button></div></article></section>}
+    {tab === "settings" && <section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">⚙</span><div><span className="eyebrow">FUNCIONAMENTO</span><h3>Controles gerais</h3></div></div>{([{ key: "assessmentsEnabled", title: "Check antes de concluir", detail: "Exige resposta nas aulas e no estágio Domínio." }, { key: "publicPracticeEnabled", title: "Prática ENEM ativa", detail: "Exibe o banco geral de questões da preparação." }, { key: "pdfEnabled", title: "Caderno protegido ativo", detail: "Permite abrir o material para usuários autorizados." }, { key: "maintenanceMode", title: "Modo manutenção", detail: "Bloqueia temporariamente o painel para todos, menos você." }] as const).map((item) => <label className="admin-toggle" key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><input type="checkbox" checked={settings[item.key]} onChange={(event) => void saveSettings({ ...settings, [item.key]: event.target.checked })} /></label>)}</article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">MSG</span><div><span className="eyebrow">COMUNICAÇÃO</span><h3>Aviso e meta diária</h3></div></div><div className="question-editor"><label className="inline-check"><input type="checkbox" checked={settings.announcementEnabled} onChange={(event) => setSettings({ ...settings, announcementEnabled: event.target.checked })} /> Mostrar aviso para todos</label><label>Mensagem<textarea value={settings.announcement} onChange={(event) => setSettings({ ...settings, announcement: event.target.value })} placeholder="Ex.: Simulado novo disponível sábado." /></label><label>Meta diária de questões<input type="number" min="1" max="100" value={settings.dailyQuestionGoal} onChange={(event) => setSettings({ ...settings, dailyQuestionGoal: Math.max(1, Math.min(100, Number(event.target.value) || 1)) })} /></label><button className="primary" disabled={saving} onClick={() => void saveSettings(settings)}>Salvar e publicar</button></div></article></section>}
 
-    {profileEditor && <div className="modal-backdrop admin-profile-backdrop" role="presentation" onMouseDown={() => setProfileEditor(null)}><section className="admin-profile-modal" role="dialog" aria-modal="true" aria-label="Editar cadastro escolar" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setProfileEditor(null)}>×</button><span className="eyebrow">CADASTRO ESCOLAR PROTEGIDO</span><h2>Editar estudante</h2><p>O e-mail Google identifica a conta e não pode ser trocado aqui. Se a pessoa perdeu a conta, use “Liberar RA / refazer cadastro”.</p><div className="admin-profile-google"><span>G</span><div><small>CONTA GOOGLE</small><strong>{profileEditor.person.email}</strong></div></div><div className="admin-profile-form"><label>Nome completo<input value={profileEditor.profile.name ?? ""} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, name: event.target.value } })} /></label><div><label>RA<input inputMode="numeric" value={profileEditor.profile.ra ?? ""} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, ra: event.target.value } })} /></label><label>Dígito<input value={profileEditor.profile.raDigit ?? ""} maxLength={2} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, raDigit: event.target.value } })} /></label></div><label>E-mail institucional<input inputMode="email" value={profileEditor.profile.institutionalEmail ?? ""} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, institutionalEmail: event.target.value } })} /></label><div><label>Série no ano de entrada<select value={profileEditor.profile.entrySchoolYear ?? "6ef"} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, entrySchoolYear: event.target.value as SchoolYear } })}>{schoolYears.map((year) => <option value={year.id} key={year.id}>{year.label}</option>)}</select></label><label>Ano letivo de entrada<input type="number" min="2020" max={currentAcademicYear()} value={profileEditor.profile.entryAcademicYear ?? currentAcademicYear()} onChange={(event) => setProfileEditor({ ...profileEditor, profile: { ...profileEditor.profile, entryAcademicYear: Number(event.target.value) } })} /></label></div></div><div className="admin-profile-actions"><button className="secondary" onClick={() => setProfileEditor(null)}>Cancelar</button><button className="primary" disabled={saving} onClick={() => void saveStudentProfile()}>{saving ? "Salvando…" : "Salvar correções"}</button></div></section></div>}
   </div>;
 }

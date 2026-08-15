@@ -2,10 +2,36 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId}/{document=**} {
-      allow read, create, update, delete:
-        if request.auth != null
-        && request.auth.uid == userId;
+    function signedIn() { return request.auth != null; }
+    function isOwner() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'samuelreisalves765@gmail.com';
+    }
+
+    match /users/{userId}/dashboard/{documentId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /userDirectory/{userId} {
+      allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow list: if isOwner();
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'lastSeenAt']);
+      allow delete: if isOwner();
+    }
+
+    match /pdfAccess/{userId} {
+      allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow list, create, update, delete: if isOwner();
+    }
+
+    match /appSettings/main {
+      allow read: if true;
+      allow write: if isOwner();
     }
   }
 }

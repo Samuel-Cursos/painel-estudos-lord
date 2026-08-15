@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'samuelreisalves765@gmail.com';
+    }
+
+    function hasPdfAccess() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/pdfAccess/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/pdfAccess/$(request.auth.uid)).data.enabled == true;
+    }
+
+    match /protected/caderno-same.pdf {
+      allow read: if isOwner() || hasPdfAccess();
+      allow write: if isOwner()
+        && request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+    }
+
+    match /users/{userId}/{allPaths=**} {
+      allow read, write:
+        if request.auth != null
+        && request.auth.uid == userId;
+    }
+  }
+}

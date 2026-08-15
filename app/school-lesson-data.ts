@@ -10,12 +10,20 @@ export type SchoolLesson = {
   duration: string;
   objective: string;
   reading: string[];
+  alternateReading: string[];
   keyPoints: string[];
   exampleTitle: string;
   example: string;
   guidedPractice: string[];
   commonMistake: string;
   exitTicket: string;
+  videoSearchUrl: string;
+  quiz: {
+    prompt: string;
+    options: string[];
+    answer: number;
+    explanation: string;
+  };
 };
 
 export type SchoolLessonProgress = Record<string, { completedAt: string }>;
@@ -99,6 +107,41 @@ function contentFor(subject: SchoolSubject, topic: string): Content {
   return humanitiesContent(subject, topic);
 }
 
+function quizFor(subject: SchoolSubject, topic: string, content: Content, seed: number) {
+  const category = subject === "math" ? "math" : subject === "portuguese" || subject === "english" ? "language" : ["science", "biology", "chemistry", "physics"].includes(subject) ? "science" : "humanities";
+  const distractors: Record<string, string[]> = {
+    math: [
+      "As unidades e o contexto podem ser ignorados quando a conta parece conhecida.",
+      "Todo problema desse assunto é resolvido com a mesma operação.",
+      "Depois do cálculo, não é necessário conferir se o resultado faz sentido.",
+    ],
+    language: [
+      "O sentido depende apenas da opinião do leitor, sem precisar de pistas do texto.",
+      "A função de uma palavra ou expressão nunca muda conforme o contexto.",
+      "Revisar as relações entre as ideias não interfere na compreensão.",
+    ],
+    science: [
+      "Uma conclusão científica é confiável mesmo quando não possui evidências.",
+      "As partes de um sistema funcionam isoladamente e não afetam umas às outras.",
+      "Observar dados é menos importante do que escolher primeiro a conclusão.",
+    ],
+    humanities: [
+      "Todo processo histórico ou social possui uma única causa e um único ponto de vista.",
+      "O contexto de tempo e espaço não muda a interpretação de um acontecimento.",
+      "Uma opinião pessoal basta como explicação, mesmo sem conceitos ou evidências.",
+    ],
+  };
+  const answer = seed % 4;
+  const options = [...distractors[category]];
+  options.splice(answer, 0, content.points[0]);
+  return {
+    prompt: `Qual alternativa apresenta uma ideia correta sobre ${topic}?`,
+    options,
+    answer,
+    explanation: `A ideia correta é: ${content.points[0]}. Isso se relaciona ao conteúdo porque ${content.idea}`,
+  };
+}
+
 export function lessonId(year: SchoolYear, subject: SchoolSubject, number: number) {
   return `school-lesson-${year}-${subject}-${String(number).padStart(2, "0")}`;
 }
@@ -121,6 +164,11 @@ export function schoolLessons(year: SchoolYear, subject: SchoolSubject): SchoolL
         content.mechanism,
         `Nesta aula de ${name}, você não precisa decorar tudo de uma vez. Leia uma parte, feche o texto e tente explicar com suas palavras. Se não conseguir, volte ao ponto exato e compare com o exemplo.`,
       ],
+      alternateReading: [
+        `Vamos por outro caminho: em linguagem direta, ${content.idea}`,
+        `Pense primeiro nesta situação: ${content.example} Depois pergunte o que mudou, qual relação aparece e por que o resultado faz sentido.`,
+        `Se ainda estiver difícil, concentre-se em uma única regra: ${content.points[0]}. Explique essa frase com um exemplo seu antes de continuar.`,
+      ],
       keyPoints: content.points,
       exampleTitle: `Exemplo guiado · ${topic}`,
       example: content.example,
@@ -131,16 +179,18 @@ export function schoolLessons(year: SchoolYear, subject: SchoolSubject): SchoolL
       ],
       commonMistake: content.mistake,
       exitTicket: `Sem consultar o texto, escreva ou fale: o que é ${topic}, qual é a ideia mais importante e onde ela pode aparecer em uma atividade?`,
+      videoSearchUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${topic} ${yearLabel(year)} aula`)}`,
+      quiz: quizFor(subject, topic, content, index),
     };
   });
 }
 
 export function completedLessonCount(year: SchoolYear, subject: SchoolSubject, progress: SchoolLessonProgress) {
-  return schoolLessons(year, subject).filter((lesson) => Boolean(progress[lesson.id])).length;
+  return schoolLessons(year, subject).filter((lesson) => Boolean(progress[lesson.id]?.completedAt)).length;
 }
 
 export function unlockedLessonIndex(year: SchoolYear, subject: SchoolSubject, progress: SchoolLessonProgress) {
   const lessons = schoolLessons(year, subject);
-  const firstPending = lessons.findIndex((lesson) => !progress[lesson.id]);
+  const firstPending = lessons.findIndex((lesson) => !progress[lesson.id]?.completedAt);
   return firstPending === -1 ? Math.max(0, lessons.length - 1) : firstPending;
 }

@@ -33,6 +33,19 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    match /studentProfiles/{userId} {
+      allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow list: if isOwner();
+      allow create, update: if isOwner() || (
+        signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.schoolYear in ['6ef', '7ef', '8ef', '9ef', '1em', '2em', '3em']
+      );
+      allow delete: if isOwner();
+    }
+
     match /pdfAccess/{userId} {
       allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
       allow list, create, update, delete: if isOwner();

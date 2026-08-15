@@ -6,6 +6,7 @@ import { Bytes, addDoc, collection, deleteDoc, doc, getDoc, getDocs, serverTimes
 import { defaultAppSettings, isOwner, PDF_CHUNK_SIZE, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC, type AppSettings } from "./access-control";
 import { firestore } from "./firebase-client";
 import { practiceSubjectNames, practiceSubjectOrder, type CustomPracticeQuestion } from "./practice-library";
+import { schoolYears, yearLabel, type SchoolYear } from "./school-data";
 
 type DirectoryUser = { uid: string; email: string; displayName?: string; photoURL?: string; lastSeenAt?: { toDate?: () => Date } };
 type UserMetrics = { lessons: number; stages: number; questions: number; openTasks: number; updatedAt?: { toDate?: () => Date } };
@@ -25,6 +26,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
   const [tab, setTab] = useState<AdminTab>("overview");
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [metrics, setMetrics] = useState<Record<string, UserMetrics>>({});
+  const [profileYears, setProfileYears] = useState<Record<string, SchoolYear>>({});
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
@@ -46,15 +48,20 @@ export default function AdminPanel({ user, onNotice }: Props) {
     if (!isOwner(user.email)) return;
     setLoading(true);
     try {
-      const [directorySnapshot, accessSnapshot, controlsSnapshot, settingsSnapshot, customSnapshot, auditSnapshot] = await Promise.all([
+      const [directorySnapshot, accessSnapshot, controlsSnapshot, profileSnapshot, settingsSnapshot, customSnapshot, auditSnapshot] = await Promise.all([
         getDocs(collection(firestore, "userDirectory")), getDocs(collection(firestore, "pdfAccess")),
         getDocs(collection(firestore, "userControls")),
+        getDocs(collection(firestore, "studentProfiles")),
         getDoc(doc(firestore, "appSettings", "main")), getDocs(collection(firestore, "customQuestions")), getDocs(collection(firestore, "adminAudit")),
       ]);
       const directory = directorySnapshot.docs.map((item) => ({ uid: item.id, ...item.data() } as DirectoryUser)).sort((a, b) => a.email.localeCompare(b.email));
       setUsers(directory);
       setAllowed(new Set(accessSnapshot.docs.filter((item) => item.data().enabled === true).map((item) => item.id)));
       setBlocked(new Set(controlsSnapshot.docs.filter((item) => item.data().siteEnabled === false).map((item) => item.id)));
+      setProfileYears(Object.fromEntries(profileSnapshot.docs.flatMap((item) => {
+        const schoolYear = item.data().schoolYear as SchoolYear | undefined;
+        return schoolYear && schoolYears.some((year) => year.id === schoolYear) ? [[item.id, schoolYear]] : [];
+      })));
       if (settingsSnapshot.exists()) setSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
       setCustomQuestions(customSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CustomPracticeQuestion)));
       setAudit(auditSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as AuditEntry)).sort((a, b) => (b.createdAt?.toDate?.().getTime() ?? 0) - (a.createdAt?.toDate?.().getTime() ?? 0)).slice(0, 12));
@@ -101,6 +108,23 @@ export default function AdminPanel({ user, onNotice }: Props) {
     const nextBlocked = new Set(blocked); const willBlock = !nextBlocked.has(person.uid);
     try { await setDoc(doc(firestore, "userControls", person.uid), { siteEnabled: !willBlock, updatedAt: serverTimestamp(), updatedBy: user.email }, { merge: true }); if (willBlock) nextBlocked.add(person.uid); else nextBlocked.delete(person.uid); setBlocked(nextBlocked); await logAction(willBlock ? "Painel bloqueado" : "Painel liberado", person.email); onNotice(`${person.email}: painel ${willBlock ? "bloqueado" : "liberado"}.`); }
     catch { onNotice("Não consegui alterar o acesso ao painel."); }
+  }
+
+  async function changeSchoolYear(person: DirectoryUser, schoolYear: SchoolYear) {
+    try {
+      await setDoc(doc(firestore, "studentProfiles", person.uid), {
+        uid: person.uid,
+        email: person.email,
+        schoolYear,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.email,
+      }, { merge: true });
+      setProfileYears((current) => ({ ...current, [person.uid]: schoolYear }));
+      await logAction("Série alterada", `${person.email} · ${yearLabel(schoolYear)}`);
+      onNotice(`${person.displayName || person.email} agora está no ${yearLabel(schoolYear)}.`);
+    } catch {
+      onNotice("Não consegui alterar a série. Publique as regras novas do Firestore.");
+    }
   }
 
   async function saveSettings(next: AppSettings) {
@@ -150,7 +174,23 @@ export default function AdminPanel({ user, onNotice }: Props) {
 
     {tab === "overview" && <><div className="admin-stats admin-stats-wide"><article><strong>{users.length}</strong><span>pessoas cadastradas</span></article><article><strong>{totals.lessons + totals.stages}</strong><span>etapas concluídas</span></article><article><strong>{totals.questions}</strong><span>questões respondidas</span></article><article><strong>{totals.tasks}</strong><span>tarefas abertas</span></article></div><section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LIVE</span><div><span className="eyebrow">SAÚDE DO SITE</span><h3>Serviços e recursos</h3></div></div><div className="admin-health"><span className="ok">Online</span><p>Login Google e sincronização pelo Firestore</p><span className={settings.publicPracticeEnabled ? "ok" : "paused"}>{settings.publicPracticeEnabled ? "Ativo" : "Pausado"}</span><p>Banco geral de todas as matérias</p><span className={settings.pdfEnabled ? "ok" : "paused"}>{settings.pdfEnabled ? "Ativo" : "Pausado"}</span><p>PDF protegido em partes no Firestore</p></div></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">LOG</span><div><span className="eyebrow">HISTÓRICO DO ADM</span><h3>Últimas ações</h3></div></div><div className="audit-list">{audit.length ? audit.map((item) => <div key={item.id}><strong>{item.action}</strong><span>{item.detail}</span><small>{timestampLabel(item.createdAt)}</small></div>) : <p>Nenhuma ação registrada ainda.</p>}</div></article></section></>}
 
-    {tab === "users" && <section className="section-block admin-users"><div className="section-heading"><div><span className="eyebrow">MONITORAMENTO E ACESSO</span><h2>Todos os usuários</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" /></div>{loading ? <div className="admin-loading">Carregando usuários e progresso…</div> : <div className="admin-user-list admin-user-list-rich">{filteredUsers.map((person) => { const owner = isOwner(person.email); const enabled = owner || allowed.has(person.uid); const isBlocked = !owner && blocked.has(person.uid); const data = metrics[person.uid] ?? { lessons: 0, stages: 0, questions: 0, openTasks: 0 }; return <article key={person.uid}><div className="admin-avatar">{(person.displayName || person.email).slice(0, 1).toUpperCase()}</div><div><strong>{person.displayName || "Usuário"}</strong><small>{person.email}</small><em>Visto: {timestampLabel(person.lastSeenAt)}</em></div><div className="user-mini-metrics"><span><b>{data.lessons + data.stages}</b> etapas</span><span><b>{data.questions}</b> questões</span><span><b>{data.openTasks}</b> tarefas</span></div><span className={isBlocked ? "access-blocked" : enabled ? "access-on" : "access-off"}>{owner ? "Dono · tudo liberado" : isBlocked ? "Painel bloqueado" : enabled ? "PDF liberado" : "Versão em texto"}</span><div className="user-admin-actions"><button disabled={owner} className={enabled ? "danger" : "primary"} onClick={() => void toggleAccess(person)}>{owner ? "Acesso permanente" : enabled ? "Remover PDF" : "Liberar PDF"}</button><button disabled={owner} className={isBlocked ? "primary" : "danger-outline"} onClick={() => void toggleSiteAccess(person)}>{isBlocked ? "Liberar painel" : "Bloquear painel"}</button><button className="danger-outline" onClick={() => void resetProgress(person)}>Zerar progresso</button></div></article>; })}</div>}</section>}
+    {tab === "users" && <section className="section-block admin-users">
+      <div className="section-heading"><div><span className="eyebrow">MONITORAMENTO E ACESSO</span><h2>Todos os usuários</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome ou e-mail" /></div>
+      {loading ? <div className="admin-loading">Carregando usuários e progresso…</div> : <div className="admin-user-list admin-user-list-rich">{filteredUsers.map((person) => {
+        const owner = isOwner(person.email);
+        const enabled = owner || allowed.has(person.uid);
+        const isBlocked = !owner && blocked.has(person.uid);
+        const data = metrics[person.uid] ?? { lessons: 0, stages: 0, questions: 0, openTasks: 0 };
+        return <article key={person.uid}>
+          <div className="admin-avatar">{(person.displayName || person.email).slice(0, 1).toUpperCase()}</div>
+          <div><strong>{person.displayName || "Usuário"}</strong><small>{person.email}</small><em>Visto: {timestampLabel(person.lastSeenAt)}</em></div>
+          <label className="admin-year-select"><span>Série do estudante</span><select value={profileYears[person.uid] ?? ""} onChange={(event) => void changeSchoolYear(person, event.target.value as SchoolYear)}><option value="" disabled>Não informada</option>{schoolYears.map((year) => <option value={year.id} key={year.id}>{year.short}</option>)}</select></label>
+          <div className="user-mini-metrics"><span><b>{data.lessons + data.stages}</b> etapas</span><span><b>{data.questions}</b> questões</span><span><b>{data.openTasks}</b> tarefas</span></div>
+          <span className={isBlocked ? "access-blocked" : enabled ? "access-on" : "access-off"}>{owner ? "Dono · tudo liberado" : isBlocked ? "Painel bloqueado" : enabled ? "PDF liberado" : "Versão em texto"}</span>
+          <div className="user-admin-actions"><button disabled={owner} className={enabled ? "danger" : "primary"} onClick={() => void toggleAccess(person)}>{owner ? "Acesso permanente" : enabled ? "Remover PDF" : "Liberar PDF"}</button><button disabled={owner} className={isBlocked ? "primary" : "danger-outline"} onClick={() => void toggleSiteAccess(person)}>{isBlocked ? "Liberar painel" : "Bloquear painel"}</button><button className="danger-outline" onClick={() => void resetProgress(person)}>Zerar progresso</button></div>
+        </article>;
+      })}</div>}
+    </section>}
 
     {tab === "content" && <><section className="admin-grid"><article className="admin-card pdf-admin-card"><div className="admin-card-head"><span className="admin-card-icon">PDF</span><div><span className="eyebrow">MATERIAL PROTEGIDO</span><h3>Caderno SAME</h3></div></div><p>{pdfInfo}</p><label className={`upload-button ${uploading ? "disabled" : ""}`}><input type="file" accept="application/pdf" disabled={uploading} onChange={(event) => void uploadPdf(event.target.files?.[0])} /><span>{uploading ? `Enviando… ${uploadProgress}%` : "Enviar ou substituir PDF"}</span></label><small>Continua gratuito: o arquivo fica dividido em partes no Firestore, fora do GitHub e da Vercel.</small></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">+Q</span><div><span className="eyebrow">EDITOR DE QUESTÕES</span><h3>Publicar nova questão</h3></div></div><div className="question-editor"><label>Matéria<select value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })}>{practiceSubjectOrder.map((id) => <option value={id} key={id}>{practiceSubjectNames[id]}</option>)}</select></label><label>Enunciado<textarea value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} placeholder="Digite a pergunta…" /></label><label className="inline-check"><input type="checkbox" checked={draft.written} onChange={(event) => setDraft({ ...draft, written: event.target.checked })} /> Resposta escrita</label>{!draft.written && <><label>Alternativas (uma por linha)<textarea value={draft.options} onChange={(event) => setDraft({ ...draft, options: event.target.value })} placeholder={"Alternativa A\nAlternativa B\nAlternativa C\nAlternativa D"} /></label><label>Alternativa correta<select value={draft.correct} onChange={(event) => setDraft({ ...draft, correct: Number(event.target.value) })}>{[0,1,2,3,4].map((value) => <option value={value} key={value}>{String.fromCharCode(65 + value)}</option>)}</select></label></>}<label>Correção / explicação<textarea value={draft.explanation} onChange={(event) => setDraft({ ...draft, explanation: event.target.value })} placeholder="Explique por que essa é a resposta…" /></label><button className="primary" disabled={saving} onClick={() => void createQuestion()}>Publicar para todos</button></div></article></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">CONTEÚDO CRIADO NO ADM</span><h2>{customQuestions.length} questões personalizadas</h2></div></div><div className="custom-question-list">{customQuestions.map((question) => <article key={question.id}><span>{practiceSubjectNames[question.subject]}</span><strong>{question.prompt}</strong><small>{question.written ? "Resposta escrita" : `${question.options?.length ?? 0} alternativas`}</small><button onClick={() => void removeQuestion(question)}>Excluir</button></article>)}{!customQuestions.length && <div className="question-empty"><strong>Nenhuma personalizada ainda.</strong><p>As 55 questões incluídas no código já estão publicadas.</p></div>}</div></section></>}
 

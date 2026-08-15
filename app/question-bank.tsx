@@ -13,8 +13,10 @@ import {
 } from "./question-bank-data";
 import { questionText } from "./question-text-data";
 import { firestore } from "./firebase-client";
-import { PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
+import { isOwner, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
 import PracticeLibrary from "./practice-library";
+import SchoolQuestionBank from "./school-question-bank";
+import { isHighSchool, yearLabel, type SchoolYear } from "./school-data";
 
 export type QuestionAttempt = {
   answer?: string;
@@ -27,6 +29,7 @@ export type QuestionProgressMap = Record<string, QuestionAttempt>;
 export type QuestionFocus = { subject: QuestionSubject; topic: string; nonce: number };
 
 type Props = {
+  schoolYear: SchoolYear;
   progress: QuestionProgressMap;
   focus?: QuestionFocus | null;
   user: User | null;
@@ -144,7 +147,7 @@ function TextQuestion({ question }: { question: Question }) {
   return <div className="text-question-document">{content?.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content?.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
 }
 
-export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
+export default function QuestionBank({ schoolYear, progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
   const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : questionChapters[0];
   const initialQuestion = focus
     ? questions.find((question) => question.chapterId === initialChapter.id && !progress[question.id]?.answer)
@@ -161,6 +164,7 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [pdfReloadKey, setPdfReloadKey] = useState(0);
   const [noteDraft, setNoteDraft] = useState(initialQuestion ? progress[initialQuestion.id]?.note ?? "" : "");
+  const showSame = isOwner(user?.email) || isHighSchool(schoolYear);
 
   const chapters = useMemo(() => questionChapters.filter((chapter) => chapter.subject === subject), [subject]);
   const answeredCount = Object.values(progress).filter((attempt) => Boolean(attempt.answer || attempt.note?.trim())).length;
@@ -180,7 +184,7 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
   }, [chapterId, progress, search, status, subject]);
 
   useEffect(() => {
-    if (!user || !pdfAllowed || !pdfEnabled) {
+    if (!showSame || !user || !pdfAllowed || !pdfEnabled) {
       return;
     }
     let active = true;
@@ -226,7 +230,7 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
     }
     void loadProtectedPdf();
     return () => { active = false; window.clearTimeout(loadingTimer); if (document) void document.destroy(); };
-  }, [onNotice, pdfAllowed, pdfEnabled, pdfReloadKey, user]);
+  }, [onNotice, pdfAllowed, pdfEnabled, pdfReloadKey, showSame, user]);
 
   function openQuestion(question: Question | null) {
     if (!question) return;
@@ -262,6 +266,8 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
   const activeAttempt = activeQuestion ? progress[activeQuestion.id] ?? {} : {};
 
   return <div className="page-content question-page">
+    <SchoolQuestionBank year={schoolYear} progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} />
+    {showSame ? <div className="same-bank-section">
     <section className="question-hero">
       <div>
         <span className="eyebrow">CADERNO SAME · 1.000 QUESTÕES</span>
@@ -315,5 +321,6 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
       </div>
       <footer className="question-modal-actions"><button className="secondary" onClick={() => setActiveQuestion(null)}>Voltar ao caderno</button><div><span>{activeAttempt.answer || activeAttempt.note?.trim() ? "Resposta registrada" : "Ainda não respondida"}</span><button className="primary" onClick={nextQuestion}>Próxima do assunto →</button></div></footer>
     </section></div>}
+    </div> : <section className="same-locked-by-grade"><span>ENEM</span><div><strong>O caderno SAME aparece no Ensino Médio</strong><p>Você está no {yearLabel(schoolYear)}. Seu banco completo e o material adequado à sua série estão acima.</p></div></section>}
   </div>;
 }

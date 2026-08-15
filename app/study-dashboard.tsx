@@ -12,6 +12,9 @@ import AdminPanel from "./admin-panel";
 import MasteryCheck from "./mastery-check";
 import { lessonMastery, skillMasteryQuestion } from "./mastery-data";
 import { defaultAppSettings, isOwner, type AppSettings } from "./access-control";
+import SchoolCurriculum from "./school-curriculum";
+import StudentProfileSetup from "./student-profile-setup";
+import { isHighSchool, schoolSubjectMeta, schoolYears, subjectsForYear, topicsFor, yearLabel, type SchoolYear } from "./school-data";
 
 type View = "today" | "courses" | "questions" | "projects" | "tasks" | "week" | "admin";
 type Status = "pending" | "done" | "not_done";
@@ -129,6 +132,8 @@ export default function StudyDashboard() {
   const [pdfAllowed, setPdfAllowed] = useState(false);
   const [siteBlocked, setSiteBlocked] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
+  const [studentYear, setStudentYear] = useState<SchoolYear | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     void getDoc(doc(firestore, "appSettings", "main")).then((snapshot) => {
@@ -145,11 +150,13 @@ export default function StudyDashboard() {
         const savedSkillProgress = window.localStorage.getItem("lord-enem-progress");
         const savedAssessments = window.localStorage.getItem("lord-enem-assessments");
         const savedQuestionProgress = window.localStorage.getItem("lord-question-progress");
+        const savedSchoolYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
         if (savedProgress) setProgress(JSON.parse(savedProgress));
         if (savedTasks) setTasks(JSON.parse(savedTasks));
         if (savedSkillProgress) setSkillProgress(JSON.parse(savedSkillProgress));
         if (savedAssessments) setAssessmentResults(JSON.parse(savedAssessments));
         if (savedQuestionProgress) setQuestionProgress(JSON.parse(savedQuestionProgress));
+        if (savedSchoolYear && schoolYears.some((item) => item.id === savedSchoolYear)) setStudentYear(savedSchoolYear);
       } catch {
         setNotice("O painel abriu, mas não conseguiu ler o progresso salvo neste navegador.");
       } finally {
@@ -181,14 +188,22 @@ export default function StudyDashboard() {
         photoURL: currentUser.photoURL ?? "",
         lastSeenAt: serverTimestamp(),
       }, { merge: true });
-      const [accessSnapshot, controlsSnapshot, settingsSnapshot] = await Promise.all([
+      const [accessSnapshot, controlsSnapshot, settingsSnapshot, profileSnapshot] = await Promise.all([
         getDoc(doc(firestore, "pdfAccess", currentUser.uid)),
         getDoc(doc(firestore, "userControls", currentUser.uid)),
         getDoc(doc(firestore, "appSettings", "main")),
+        getDoc(doc(firestore, "studentProfiles", currentUser.uid)),
       ]);
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
       setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
+      const cloudYear = profileSnapshot.exists() ? profileSnapshot.data().schoolYear as SchoolYear : null;
+      const localYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
+      if (cloudYear && schoolYears.some((item) => item.id === cloudYear)) {
+        setStudentYear(cloudYear); window.localStorage.setItem("lord-school-year", cloudYear);
+      } else if (localYear && schoolYears.some((item) => item.id === localYear)) {
+        await setDoc(doc(firestore, "studentProfiles", currentUser.uid), { uid: currentUser.uid, email: currentUser.email, schoolYear: localYear, updatedAt: serverTimestamp() }, { merge: true });
+      }
       const resetToken = controlsSnapshot.exists() ? Number(controlsSnapshot.data().resetToken ?? 0) : 0;
       const previousResetToken = Number(window.localStorage.getItem("lord-admin-reset-token") ?? 0);
       if (resetToken > previousResetToken) {
@@ -273,11 +288,25 @@ export default function StudyDashboard() {
     setNotice("Conta desconectada. O painel continua funcionando neste aparelho.");
   }
 
+  async function selectSchoolYear(year: SchoolYear) {
+    setStudentYear(year); setProfileOpen(false); window.localStorage.setItem("lord-school-year", year);
+    if (user) {
+      try {
+        await setDoc(doc(firestore, "studentProfiles", user.uid), { uid: user.uid, email: user.email, schoolYear: year, updatedAt: serverTimestamp() }, { merge: true });
+        setNotice(`Perfil atualizado para ${yearLabel(year)}.`);
+      } catch { setNotice("A série foi salva neste aparelho, mas o Firebase recusou a sincronização."); }
+    }
+  }
+
   const todaySchedule = currentDate ? weeklyPlan.filter((item) => item.day === currentDate.getDay()) : [];
   const lessonDoneCount = Object.values(progress).filter((status) => status === "done").length;
   const skillStageDoneCount = Object.values(skillProgress).reduce((sum, item) => sum + stages.filter((stage) => item[stage.id]).length, 0);
   const totalTrackable = lessons.length + intensiveSkills.length * stages.length;
-  const progressPercent = Math.round(((lessonDoneCount + skillStageDoneCount) / totalTrackable) * 100);
+  const gradeQuestionTotal = studentYear ? subjectsForYear(studentYear).length * 100 : 0;
+  const gradeQuestionDone = studentYear ? Object.entries(questionProgress).filter(([id, attempt]) => id.startsWith(`school-${studentYear}-`) && Boolean(attempt.answer || attempt.note?.trim())).length : 0;
+  const sidebarDone = isOwner(user?.email) ? lessonDoneCount + skillStageDoneCount : gradeQuestionDone;
+  const sidebarTotal = isOwner(user?.email) ? totalTrackable : gradeQuestionTotal;
+  const sidebarPercent = sidebarTotal ? Math.round((sidebarDone / sidebarTotal) * 100) : 0;
   const nextBySubject = useMemo(() => Object.fromEntries(subjects.map((subject) => [subject.id, getNextLesson(subject.id, progress)])) as Record<SubjectId, Lesson>, [progress]);
 
   const activeEnemSkills = useMemo(() => {
@@ -436,24 +465,30 @@ export default function StudyDashboard() {
     return <><button className="back-link assessment-back" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><section className="assessment-hero"><span className="eyebrow">MÉTRICAS DO MAPA</span><h2>Provas antigas e simulados</h2><p>Registre data, acertos por área e tempo gasto. O total é calculado automaticamente.</p></section>{groups.map((group) => <section className="section-block" key={group.title}><div className="section-heading"><div><span className="eyebrow">ACOMPANHAMENTO</span><h2>{group.title}</h2></div><span className="muted">{group.items.length} registros</span></div><div className="assessment-table"><div className="assessment-row assessment-head"><span>Prova</span><span>Data</span><span>LC</span><span>CH</span><span>CN</span><span>MAT</span><span>Total</span><span>Tempo</span></div>{group.items.map((name) => { const record = assessmentResults[name]; return <div className="assessment-row" key={name}><strong>{name}</strong><input aria-label={`Data de ${name}`} type="date" value={record?.date ?? ""} onChange={(event) => updateAssessment(name, "date", event.target.value)} /><input aria-label={`LC de ${name}`} inputMode="numeric" value={record?.lc ?? ""} onChange={(event) => updateAssessment(name, "lc", event.target.value)} /><input aria-label={`CH de ${name}`} inputMode="numeric" value={record?.ch ?? ""} onChange={(event) => updateAssessment(name, "ch", event.target.value)} /><input aria-label={`CN de ${name}`} inputMode="numeric" value={record?.cn ?? ""} onChange={(event) => updateAssessment(name, "cn", event.target.value)} /><input aria-label={`Matemática de ${name}`} inputMode="numeric" value={record?.math ?? ""} onChange={(event) => updateAssessment(name, "math", event.target.value)} /><span className="assessment-total">{totalAssessment(record)}</span><input aria-label={`Tempo de ${name}`} placeholder="5h20" value={record?.time ?? ""} onChange={(event) => updateAssessment(name, "time", event.target.value)} /></div>; })}</div></section>)}</>;
   }
 
-  const visibleViews = (Object.keys(viewLabels) as View[]).filter((item) => item !== "admin" || isOwner(user?.email));
+  const visibleViews = (Object.keys(viewLabels) as View[]).filter((item) => {
+    if (item === "admin") return isOwner(user?.email);
+    if (!isOwner(user?.email) && (item === "projects" || item === "week")) return false;
+    return true;
+  });
 
   return <main className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">L</div><div><strong>Lord Focus</strong><span>Painel pessoal</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${progressPercent * 3.6}deg` } as React.CSSProperties}><span>{progressPercent}%</span></div><div><strong>Mapa completo</strong><span>{lessonDoneCount + skillStageDoneCount} de {totalTrackable} etapas</span></div></div><div className="sidebar-rule"><span>Regra do painel</span><p>Você não procura o que fazer. Abre, faz a próxima ação e marca.</p></div></aside>
+    <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">L</div><div><strong>Lord Focus</strong><span>Painel pessoal</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>{isOwner(user?.email) ? "Mapa completo" : studentYear ? schoolYears.find((item) => item.id === studentYear)?.short : "Sua série"}</strong><span>{sidebarDone} de {sidebarTotal} atividades</span></div></div><div className="sidebar-rule"><span>Regra do painel</span><p>Você não procura o que fazer. Abre, faz a próxima ação e marca.</p></div></aside>
 
-    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button>{user ? <button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button> : <button className="google-login" onClick={connectGoogle} disabled={authLoading}><span>G</span>{authLoading ? "Abrindo..." : "Entrar com Google"}</button>}</div></header>
+    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions">{studentYear && <button className="grade-profile-button" onClick={() => setProfileOpen(true)}><span>{schoolYears.find((item) => item.id === studentYear)?.short}</span><small>Alterar série</small></button>}<button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button>{user ? <button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button> : <button className="google-login" onClick={connectGoogle} disabled={authLoading}><span>G</span>{authLoading ? "Abrindo..." : "Entrar com Google"}</button>}</div></header>
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {appSettings.announcementEnabled && appSettings.announcement.trim() && <div className="global-announcement"><strong>AVISO DO ADM</strong><span>{appSettings.announcement}</span></div>}
       {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso ao painel foi pausado pelo ADM." : "O Lord está atualizando o painel."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso salvo continua seguro."}</p></div></div>}
 
-      {view === "today" && <div className="page-content today-page"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMA AÇÃO</span>{todaySchedule.length ? <><h2>Hoje você só precisa começar.</h2><p>{todaySchedule.length === 1 ? "Uma sessão planejada" : `${todaySchedule.length} sessões planejadas`} para hoje. O conteúdo já está escolhido.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedLesson(nextBySubject[todaySchedule[0].subject])}>Abrir aula de agora →</button><span>Comece com 5 minutos</span></div></> : <><h2>Hoje é dia leve.</h2><p>Quarta, quinta e domingo ficam protegidos para culto, música e descanso. Se quiser adiantar algo, faça apenas o modo mínimo.</p><div className="hero-actions"><button className="primary" onClick={() => setView("tasks")}>Ver tarefas rápidas →</button><span>Sem criar dívida</span></div></>}</div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">{todaySchedule.length ? subjectById(todaySchedule[0].subject).icon : "✓"}</div></div></section>
+      {view === "today" && studentYear && !isOwner(user?.email) && <div className="page-content grade-home"><section className="grade-home-hero"><div><span className="eyebrow">PAINEL PERSONALIZADO · {yearLabel(studentYear)}</span><h2>Seu conteúdo está na série certa.</h2><p>Escolha uma matéria, estude uma unidade e responda o bloco de atividades. O painel salva tudo para você continuar depois.</p><div><button className="primary" onClick={() => setView("courses")}>Abrir material da série →</button><button className="secondary" onClick={() => setView("questions")}>Resolver questões →</button></div></div><aside><strong>{subjectsForYear(studentYear).length}</strong><span>matérias</span><strong>{subjectsForYear(studentYear).length * 100}</strong><span>atividades</span></aside></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">COMECE POR UMA MATÉRIA</span><h2>Trilhas do {yearLabel(studentYear)}</h2></div></div><div className="grade-home-grid">{subjectsForYear(studentYear).map((subject) => { const meta = schoolSubjectMeta[subject]; return <button key={subject} style={{ "--accent": meta.color } as React.CSSProperties} onClick={() => setView("courses")}><span>{meta.icon}</span><div><strong>{meta.name}</strong><small>Comece por {topicsFor(studentYear, subject)[0]}</small></div><b>→</b></button>; })}</div></section></div>}
+
+      {view === "today" && (isOwner(user?.email) || !studentYear) && <div className="page-content today-page"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMA AÇÃO</span>{todaySchedule.length ? <><h2>Hoje você só precisa começar.</h2><p>{todaySchedule.length === 1 ? "Uma sessão planejada" : `${todaySchedule.length} sessões planejadas`} para hoje. O conteúdo já está escolhido.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedLesson(nextBySubject[todaySchedule[0].subject])}>Abrir aula de agora →</button><span>Comece com 5 minutos</span></div></> : <><h2>Hoje é dia leve.</h2><p>Quarta, quinta e domingo ficam protegidos para culto, música e descanso. Se quiser adiantar algo, faça apenas o modo mínimo.</p><div className="hero-actions"><button className="primary" onClick={() => setView("tasks")}>Ver tarefas rápidas →</button><span>Sem criar dívida</span></div></>}</div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">{todaySchedule.length ? subjectById(todaySchedule[0].subject).icon : "✓"}</div></div></section>
         <section className="section-block"><div className="section-heading"><div><span className="eyebrow">ROTEIRO DE HOJE</span><h2>Chegue e faça</h2></div><span className="muted">Nada para pesquisar</span></div><div className="today-grid">{todaySchedule.length ? todaySchedule.map((slot, index) => { const lesson = nextBySubject[slot.subject]; const subject = subjectById(slot.subject); return <article className="today-card" key={`${slot.time}-${slot.subject}`} style={{ "--accent": subject.color } as React.CSSProperties}><div className="time-column"><strong>{slot.time}</strong><span>{index + 1}</span></div><div className="today-card-body"><div className="card-kicker"><span className="subject-dot" />{subject.name} · aula {lesson.number}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p><div className="card-footer"><span>{lesson.duration}</span><button onClick={() => setSelectedLesson(lesson)}>Abrir aula →</button></div></div></article>; }) : <article className="empty-day"><strong>Sem aula obrigatória hoje</strong><p>Abra “Tarefas” se houver algo da escola. Caso contrário, cumpra seus compromissos e descanse.</p></article>}</div></section>
         <section className="dashboard-split"><div className="section-block"><div className="section-heading"><div><span className="eyebrow">SUAS TRILHAS</span><h2>Próxima de cada matéria</h2></div><button className="text-button" onClick={() => { setSelectedSubject("all"); setView("courses"); }}>Abrir mapa completo</button></div><div className="course-mini-grid">{subjects.map((subject) => { const lesson = nextBySubject[subject.id]; const completed = lessons.filter((item) => item.subject === subject.id && progress[item.id] === "done").length; const total = lessons.filter((item) => item.subject === subject.id).length; return <button className="course-mini" key={subject.id} onClick={() => goToSubject(subject.id)} style={{ "--accent": subject.color } as React.CSSProperties}><span className="course-icon">{subject.icon}</span><div><strong>{subject.name}</strong><small>{lesson.title}</small><div className="mini-progress"><span style={{ width: `${(completed / total) * 100}%` }} /></div></div><b>{completed}/{total}</b></button>; })}</div></div><div className="section-block task-preview"><div className="section-heading"><div><span className="eyebrow">NÃO ESQUECER</span><h2>Tarefas abertas</h2></div><button className="text-button" onClick={() => setView("tasks")}>Gerenciar</button></div><div className="task-list compact">{tasks.filter((task) => !task.done).slice(0, 4).map((task) => <label className="task-row" key={task.id}><input type="checkbox" checked={task.done} onChange={() => toggleTask(task)} /><span><strong>{task.title}</strong><small>{task.category}{task.dueDate ? ` · ${task.dueDate.split("-").reverse().join("/")}` : ""}</small></span></label>)}{!tasks.some((task) => !task.done) && <div className="empty-list"><span>✓</span><p>Nenhuma tarefa esquecida.</p></div>}</div></div></section>
       </div>}
 
-      {view === "courses" && <div className="page-content courses-page">{selectedSubject === "all" && <><section className="intro-row"><div><span className="eyebrow">CONTEÚDO COMPLETO</span><h2>Escolha uma matéria</h2><p>O cronograma inteiro do PDF foi separado em áreas. Inglês e Programação continuam com as aulas que já estavam prontas.</p></div></section>{renderSubjectHub()}</>}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && <>{isEnemSubject(selectedSubject) ? renderEnemCourse(selectedSubject) : <><section className="intro-row course-detail-head"><div><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><span className="eyebrow">CONTEÚDO PRONTO</span><h2>{subjectById(selectedSubject).name}</h2><p>{subjectById(selectedSubject).description}</p></div></section>{renderClassicCourse(selectedSubject)}</>}</>}</div>}
+      {view === "courses" && studentYear && <div className="page-content courses-page">{selectedSubject === "all" && <><SchoolCurriculum year={studentYear} onOpenQuestions={() => setView("questions")} />{(isHighSchool(studentYear) || isOwner(user?.email)) && <section className="advanced-track"><div className="intro-row"><div><span className="eyebrow">PREPARAÇÃO AVANÇADA · ENEM</span><h2>Mapa competitivo e projetos</h2><p>Este material é indicado para o Ensino Médio. Sua conta de dono sempre consegue acessá-lo para administrar e revisar.</p></div></div>{renderSubjectHub()}</section>}</>}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && <>{isEnemSubject(selectedSubject) ? renderEnemCourse(selectedSubject) : <><section className="intro-row course-detail-head"><div><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><span className="eyebrow">CONTEÚDO PRONTO</span><h2>{subjectById(selectedSubject).name}</h2><p>{subjectById(selectedSubject).description}</p></div></section>{renderClassicCourse(selectedSubject)}</>}</>}</div>}
 
-      {view === "questions" && <QuestionBank key={`${user?.uid ?? "local"}-${questionFocus?.nonce ?? 0}`} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} />}
+      {view === "questions" && studentYear && <QuestionBank key={`${user?.uid ?? "local"}-${studentYear}-${questionFocus?.nonce ?? 0}`} schoolYear={studentYear} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} />}
 
       {view === "admin" && user && isOwner(user.email) && <AdminPanel user={user} onNotice={setNotice} />}
 
@@ -473,6 +508,8 @@ export default function StudyDashboard() {
     {masteryLesson && <MasteryCheck question={lessonMastery[masteryLesson.id]} title={`${subjectById(masteryLesson.subject).name} · ${masteryLesson.title}`} onClose={() => setMasteryLesson(null)} onPass={() => { setLessonStatus(masteryLesson, "done"); setMasteryLesson(null); setSelectedLesson(null); }} />}
 
     {masterySkill && <MasteryCheck question={skillMasteryQuestion(masterySkill.subject, masterySkill.skill)} title={`${subjectById(masterySkill.subject).name} · ${masterySkill.skill}`} onClose={() => setMasterySkill(null)} onPass={() => { toggleSkillStage(masterySkill, "mastery"); setMasterySkill(null); setSelectedSkill(null); }} />}
+
+    {!loading && (!studentYear || profileOpen) && <StudentProfileSetup user={user} current={studentYear} required={!studentYear} onSelect={(year) => void selectSchoolYear(year)} onClose={() => setProfileOpen(false)} />}
 
     {loading && <div className="loading-screen"><div className="loader"/><span>Organizando seu próximo passo...</span></div>}
   </main>;

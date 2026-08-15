@@ -49,7 +49,7 @@ git config user.email "samuelreisalves765@gmail.com"
 git branch -M main
 if (git remote | Select-String -Quiet '^origin$') { git remote set-url origin https://github.com/Samuel-Cursos/painel-estudos-lord.git } else { git remote add origin https://github.com/Samuel-Cursos/painel-estudos-lord.git }
 git add .
-git commit -m "Transforma aulas em estudo guiado com teste"
+git commit -m "Cria aulas completas e separa area ENEM"
 git push -u origin main
 ```
 
@@ -66,9 +66,9 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 - A série é escolhida uma vez e avança automaticamente a cada novo ano letivo, parando na 3ª série.
 - A senha nunca passa pelo site, Firestore ou ADM: ela fica protegida no Google.
 - Cada série recebe somente suas matérias, com 10 aulas guiadas por matéria.
-- Cada aula reúne explicação, exemplo, resumo pronto para anotar, prática de recuperação e um teste imediato.
-- “Ainda não entendi” abre outra explicação e uma busca de videoaula. “Entendi” abre o teste, e só o acerto libera a próxima aula.
-- A aba separada de questões é exclusiva para a preparação do ENEM e aparece apenas no Ensino Médio e para o dono.
+- Cada aula reúne aquecimento, explicação em capítulos, lousa visual, exemplo resolvido passo a passo, resumo para anotar, fontes, videoaula de apoio e teste imediato.
+- “Não entendi” abre uma segunda aula explicada por outro caminho. “Entendi” abre a questão dentro da própria aula, e só o acerto libera a próxima.
+- Trilhas contém apenas as aulas escolares da série. Toda a preparação avançada, matérias, provas, simulados e o caderno de 1.000 questões ficam na aba ENEM.
 - O progresso das aulas e das respostas sincroniza entre celular e computador pela conta Google.
 - Alunos do Ensino Médio veem o caderno SAME em texto; dono e pessoas liberadas também veem o PDF original reconstruído das partes protegidas do Firestore.
 - Só `samuelreisalves765@gmail.com` enxerga a Central ADM e tem acesso permanente a tudo.

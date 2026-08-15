@@ -9,7 +9,11 @@ export type SchoolLesson = {
   level: string;
   duration: string;
   objective: string;
+  warmUp: string;
   reading: string[];
+  sections: Array<{ title: string; paragraphs: string[] }>;
+  visualBoard: { title: string; items: string[]; caption: string };
+  workedSteps: string[];
   alternateReading: string[];
   keyPoints: string[];
   exampleTitle: string;
@@ -18,6 +22,7 @@ export type SchoolLesson = {
   commonMistake: string;
   exitTicket: string;
   videoSearchUrl: string;
+  sourceLinks: Array<{ label: string; url: string }>;
   quiz: {
     prompt: string;
     options: string[];
@@ -107,8 +112,88 @@ function contentFor(subject: SchoolSubject, topic: string): Content {
   return humanitiesContent(subject, topic);
 }
 
+function categoryFor(subject: SchoolSubject) {
+  if (subject === "math") return "math";
+  if (subject === "portuguese" || subject === "english") return "language";
+  if (["science", "biology", "chemistry", "physics"].includes(subject)) return "science";
+  return "humanities";
+}
+
+function completeSections(subject: SchoolSubject, topic: string, content: Content, year: SchoolYear) {
+  const category = categoryFor(subject);
+  const recognition: Record<string, string> = {
+    math: `Em uma atividade de ${topic}, comece traduzindo o enunciado: marque os dados, a unidade de cada medida e o que precisa ser descoberto. Só depois escolha a operação, a fórmula ou a representação. O resultado final precisa responder à pergunta e ser compatível com a ordem de grandeza esperada.`,
+    language: `Para reconhecer ${topic}, leia a frase ou o texto inteiro. Observe quem fala, para quem, com qual intenção e quais palavras ligam as ideias. Depois aponte um trecho como evidência. Uma análise de língua não se sustenta apenas em “eu acho”; ela precisa mostrar o efeito produzido no contexto.`,
+    science: `Ao estudar ${topic}, separe três níveis: o que pode ser observado, o modelo usado para explicar e a evidência que apoia a conclusão. Diagramas e nomes ajudam, mas o principal é compreender o processo e como uma mudança em uma parte interfere nas demais.`,
+    humanities: `Para compreender ${topic}, situe o assunto no tempo e no espaço, identifique grupos e interesses envolvidos e procure causas, consequências, mudanças e permanências. Compare pontos de vista: acontecimentos humanos raramente possuem uma explicação única.`,
+  };
+  const application: Record<string, string> = {
+    math: `No cotidiano, ${topic} aparece quando precisamos comparar, medir, prever ou decidir. Uma boa solução mostra as etapas, mantém as unidades e termina com uma frase interpretando o número encontrado.`,
+    language: `${topic} aparece em conversas, notícias, propagandas, livros, redes sociais e textos escolares. Saber identificar o recurso permite compreender melhor a mensagem e também escrever com mais clareza.`,
+    science: `${topic} pode ser ligado a situações do corpo, do ambiente, da tecnologia ou dos materiais. Faça sempre a ponte entre o conceito e um fenômeno real; isso impede que a aula vire apenas uma lista de nomes.`,
+    humanities: `${topic} ajuda a interpretar escolhas coletivas e problemas atuais. A comparação com o presente deve respeitar as diferenças de contexto e ser apoiada por fatos, conceitos ou fontes.`,
+  };
+  return [
+    {
+      title: "A ideia central, sem decorar",
+      paragraphs: [
+        content.idea,
+        `O objetivo desta aula do ${yearLabel(year)} é entender o sentido de ${topic} e conseguir reconhecê-lo em uma situação nova. Decorar uma frase pode ajudar no começo, mas aprender de verdade significa explicar por que o conteúdo funciona e produzir um exemplo próprio.`,
+      ],
+    },
+    {
+      title: "Como o conteúdo funciona",
+      paragraphs: [
+        content.mechanism,
+        `Organize o raciocínio nesta ordem: primeiro identifique o problema; depois conecte-o às ideias “${content.points.join("”, “")}"; por fim, confira se a explicação responde ao que foi pedido. Essa sequência é mais importante do que repetir uma definição pronta.`,
+      ],
+    },
+    {
+      title: "Como reconhecer em uma atividade",
+      paragraphs: [recognition[category]],
+    },
+    {
+      title: "Onde isso aparece de verdade",
+      paragraphs: [application[category]],
+    },
+  ];
+}
+
+function workedStepsFor(subject: SchoolSubject, topic: string, content: Content) {
+  const category = categoryFor(subject);
+  const middle: Record<string, string> = {
+    math: "Separe os dados e as unidades, escolha a representação e faça uma etapa de cada vez.",
+    language: "Marque no texto as palavras ou construções que comprovam a análise e explique o efeito delas.",
+    science: "Relacione estrutura, processo, causa e consequência usando a evidência apresentada.",
+    humanities: "Localize tempo, espaço, sujeitos e interesses antes de explicar causas e consequências.",
+  };
+  return [
+    `1. Leia a situação e diga, com suas palavras, o que precisa ser entendido sobre ${topic}.`,
+    `2. ${middle[category]}`,
+    `3. Use este modelo como referência: ${content.example}`,
+    `4. Confira o resultado com a regra principal: ${content.points[0]}.`,
+    "5. Termine explicando por que a resposta faz sentido, sem apenas repetir o enunciado.",
+  ];
+}
+
+function sourcesFor(subject: SchoolSubject, topic: string, year: SchoolYear) {
+  const channel = subject === "math" || ["science", "biology", "chemistry", "physics"].includes(subject)
+    ? "Khan Academy Brasil"
+    : subject === "english" ? "inglês aula português"
+      : subject === "portuguese" ? "Português com Letícia"
+        : "Brasil Escola";
+  const query = encodeURIComponent(`${topic} ${yearLabel(year)} ${channel}`);
+  return {
+    video: `https://www.youtube.com/results?search_query=${query}`,
+    links: [
+      { label: "Currículo nacional · MEC/BNCC", url: "https://basenacionalcomum.mec.gov.br/" },
+      { label: `Pesquisar material de apoio sobre ${topic}`, url: `https://www.google.com/search?q=${encodeURIComponent(`${topic} ${yearLabel(year)} material de estudo`)}` },
+    ],
+  };
+}
+
 function quizFor(subject: SchoolSubject, topic: string, content: Content, seed: number) {
-  const category = subject === "math" ? "math" : subject === "portuguese" || subject === "english" ? "language" : ["science", "biology", "chemistry", "physics"].includes(subject) ? "science" : "humanities";
+  const category = categoryFor(subject);
   const distractors: Record<string, string[]> = {
     math: [
       "As unidades e o contexto podem ser ignorados quando a conta parece conhecida.",
@@ -150,6 +235,7 @@ export function schoolLessons(year: SchoolYear, subject: SchoolSubject): SchoolL
   return topicsFor(year, subject).map((topic, index) => {
     const content = contentFor(subject, topic);
     const name = schoolSubjectMeta[subject].name;
+    const sources = sourcesFor(subject, topic, year);
     return {
       id: lessonId(year, subject, index + 1),
       year,
@@ -159,15 +245,24 @@ export function schoolLessons(year: SchoolYear, subject: SchoolSubject): SchoolL
       level: levels[index],
       duration: index < 2 ? "20–25 min" : index < 6 ? "25–35 min" : "35–45 min",
       objective: `Compreender ${topic}, reconhecer o conteúdo em situações do ${yearLabel(year)} e explicar o raciocínio com autonomia.`,
+      warmUp: `Antes de começar: o que você já ouviu sobre ${topic}? Pense em uma situação, palavra, imagem ou problema que possa ter relação com esse assunto. Não precisa acertar; essa pergunta serve para ativar o que você já sabe.`,
       reading: [
         content.idea,
         content.mechanism,
         `Nesta aula de ${name}, você não precisa decorar tudo de uma vez. Leia uma parte, feche o texto e tente explicar com suas palavras. Se não conseguir, volte ao ponto exato e compare com o exemplo.`,
       ],
+      sections: completeSections(subject, topic, content, year),
+      visualBoard: {
+        title: `Mapa da aula · ${topic}`,
+        items: content.points,
+        caption: `Leia da esquerda para a direita e tente explicar como as três ideias se conectam ao tema ${topic}.`,
+      },
+      workedSteps: workedStepsFor(subject, topic, content),
       alternateReading: [
-        `Vamos por outro caminho: em linguagem direta, ${content.idea}`,
-        `Pense primeiro nesta situação: ${content.example} Depois pergunte o que mudou, qual relação aparece e por que o resultado faz sentido.`,
-        `Se ainda estiver difícil, concentre-se em uma única regra: ${content.points[0]}. Explique essa frase com um exemplo seu antes de continuar.`,
+        `Vamos recomeçar sem os nomes difíceis. Em linguagem direta: ${content.idea}`,
+        `Imagine que você precisa ensinar ${topic} para alguém mais novo. Comece pelo caso concreto: ${content.example}`,
+        `Agora ligue o exemplo à regra. O ponto “${content.points[0]}” explica a parte principal; “${content.points[1]}” mostra o que precisa ser observado; e “${content.points[2]}” ajuda a conferir se o raciocínio está completo.`,
+        `Se ainda não ficou claro, volte ao exemplo e responda somente duas perguntas: o que aconteceu primeiro e por que o resultado mudou? Depois releia a explicação principal.`,
       ],
       keyPoints: content.points,
       exampleTitle: `Exemplo guiado · ${topic}`,
@@ -179,7 +274,8 @@ export function schoolLessons(year: SchoolYear, subject: SchoolSubject): SchoolL
       ],
       commonMistake: content.mistake,
       exitTicket: `Sem consultar o texto, escreva ou fale: o que é ${topic}, qual é a ideia mais importante e onde ela pode aparecer em uma atividade?`,
-      videoSearchUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${topic} ${yearLabel(year)} aula`)}`,
+      videoSearchUrl: sources.video,
+      sourceLinks: sources.links,
       quiz: quizFor(subject, topic, content, index),
     };
   });

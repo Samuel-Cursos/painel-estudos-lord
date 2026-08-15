@@ -17,6 +17,8 @@ import StudentProfileSetup from "./student-profile-setup";
 import { isHighSchool, schoolSubjectMeta, schoolYears, subjectsForYear, topicsFor, yearLabel, type SchoolYear } from "./school-data";
 import StudentLobby, { type RegistrationDraft } from "./student-lobby";
 import { currentAcademicYear, currentSchoolYear, isCompleteStudentProfile, normalizeRa, type StudentProfile } from "./student-profile";
+import { type SchoolLesson, type SchoolLessonProgress } from "./school-lesson-data";
+import type { SchoolQuestionFocus } from "./school-question-bank";
 
 type View = "today" | "courses" | "questions" | "projects" | "tasks" | "week" | "admin";
 type Status = "pending" | "done" | "not_done";
@@ -34,6 +36,7 @@ type CloudDashboard = {
   skillProgress?: SkillProgress;
   assessmentResults?: AssessmentMap;
   questionProgress?: QuestionProgressMap;
+  schoolLessonProgress?: SchoolLessonProgress;
   tasks?: Task[];
 };
 
@@ -112,6 +115,8 @@ export default function StudyDashboard() {
   const [assessmentResults, setAssessmentResults] = useState<AssessmentMap>({});
   const [questionProgress, setQuestionProgress] = useState<QuestionProgressMap>({});
   const [questionFocus, setQuestionFocus] = useState<QuestionFocus | null>(null);
+  const [schoolQuestionFocus, setSchoolQuestionFocus] = useState<SchoolQuestionFocus | null>(null);
+  const [schoolLessonProgress, setSchoolLessonProgress] = useState<SchoolLessonProgress>({});
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<SkillWithId | null>(null);
@@ -155,12 +160,14 @@ export default function StudyDashboard() {
         const savedSkillProgress = window.localStorage.getItem("lord-enem-progress");
         const savedAssessments = window.localStorage.getItem("lord-enem-assessments");
         const savedQuestionProgress = window.localStorage.getItem("lord-question-progress");
+        const savedSchoolLessonProgress = window.localStorage.getItem("lord-school-lesson-progress");
         const savedSchoolYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
         if (savedProgress) setProgress(JSON.parse(savedProgress));
         if (savedTasks) setTasks(JSON.parse(savedTasks));
         if (savedSkillProgress) setSkillProgress(JSON.parse(savedSkillProgress));
         if (savedAssessments) setAssessmentResults(JSON.parse(savedAssessments));
         if (savedQuestionProgress) setQuestionProgress(JSON.parse(savedQuestionProgress));
+        if (savedSchoolLessonProgress) setSchoolLessonProgress(JSON.parse(savedSchoolLessonProgress));
         if (savedSchoolYear && schoolYears.some((item) => item.id === savedSchoolYear)) { setStudentYear(savedSchoolYear); setLegacySchoolYear(savedSchoolYear); }
       } catch {
         setNotice("O painel abriu, mas não conseguiu ler o progresso salvo neste navegador.");
@@ -223,8 +230,8 @@ export default function StudyDashboard() {
       const resetToken = controlsSnapshot.exists() ? Number(controlsSnapshot.data().resetToken ?? 0) : 0;
       const previousResetToken = Number(window.localStorage.getItem("lord-admin-reset-token") ?? 0);
       if (resetToken > previousResetToken) {
-        ["lord-focus-progress", "lord-focus-tasks", "lord-enem-progress", "lord-enem-assessments", "lord-question-progress"].forEach((key) => window.localStorage.removeItem(key));
-        setProgress({}); setTasks([]); setSkillProgress({}); setAssessmentResults({}); setQuestionProgress({});
+        ["lord-focus-progress", "lord-focus-tasks", "lord-enem-progress", "lord-enem-assessments", "lord-question-progress", "lord-school-lesson-progress"].forEach((key) => window.localStorage.removeItem(key));
+        setProgress({}); setTasks([]); setSkillProgress({}); setAssessmentResults({}); setQuestionProgress({}); setSchoolLessonProgress({});
         window.localStorage.setItem("lord-admin-reset-token", String(resetToken));
       }
       const dashboardRef = doc(firestore, "users", currentUser.uid, "dashboard", "main");
@@ -248,6 +255,10 @@ export default function StudyDashboard() {
           setQuestionProgress(cloud.questionProgress);
           window.localStorage.setItem("lord-question-progress", JSON.stringify(cloud.questionProgress));
         }
+        if (cloud.schoolLessonProgress) {
+          setSchoolLessonProgress(cloud.schoolLessonProgress);
+          window.localStorage.setItem("lord-school-lesson-progress", JSON.stringify(cloud.schoolLessonProgress));
+        }
         if (cloud.tasks) {
           setTasks(cloud.tasks);
           window.localStorage.setItem("lord-focus-tasks", JSON.stringify(cloud.tasks));
@@ -258,6 +269,7 @@ export default function StudyDashboard() {
           skillProgress: JSON.parse(window.localStorage.getItem("lord-enem-progress") ?? "{}"),
           assessmentResults: JSON.parse(window.localStorage.getItem("lord-enem-assessments") ?? "{}"),
           questionProgress: JSON.parse(window.localStorage.getItem("lord-question-progress") ?? "{}"),
+          schoolLessonProgress: JSON.parse(window.localStorage.getItem("lord-school-lesson-progress") ?? "{}"),
           tasks: JSON.parse(window.localStorage.getItem("lord-focus-tasks") ?? "[]"),
         };
         await setDoc(dashboardRef, { ...localDashboard, updatedAt: serverTimestamp() });
@@ -361,8 +373,10 @@ export default function StudyDashboard() {
   const totalTrackable = lessons.length + intensiveSkills.length * stages.length;
   const gradeQuestionTotal = studentYear ? subjectsForYear(studentYear).length * 100 : 0;
   const gradeQuestionDone = studentYear ? Object.entries(questionProgress).filter(([id, attempt]) => id.startsWith(`school-${studentYear}-`) && Boolean(attempt.answer || attempt.note?.trim())).length : 0;
-  const sidebarDone = isOwner(user?.email) ? lessonDoneCount + skillStageDoneCount : gradeQuestionDone;
-  const sidebarTotal = isOwner(user?.email) ? totalTrackable : gradeQuestionTotal;
+  const gradeLessonTotal = studentYear ? subjectsForYear(studentYear).length * 10 : 0;
+  const gradeLessonDone = studentYear ? Object.keys(schoolLessonProgress).filter((id) => id.startsWith(`school-lesson-${studentYear}-`)).length : 0;
+  const sidebarDone = isOwner(user?.email) ? lessonDoneCount + skillStageDoneCount : gradeLessonDone + gradeQuestionDone;
+  const sidebarTotal = isOwner(user?.email) ? totalTrackable : gradeLessonTotal + gradeQuestionTotal;
   const sidebarPercent = sidebarTotal ? Math.round((sidebarDone / sidebarTotal) * 100) : 0;
   const nextBySubject = useMemo(() => Object.fromEntries(subjects.map((subject) => [subject.id, getNextLesson(subject.id, progress)])) as Record<SubjectId, Lesson>, [progress]);
 
@@ -429,6 +443,19 @@ export default function StudyDashboard() {
     setQuestionProgress(next);
     window.localStorage.setItem("lord-question-progress", JSON.stringify(next));
     void saveToCloud({ questionProgress: next });
+  }
+
+  function completeSchoolLesson(lesson: SchoolLesson) {
+    const next = { ...schoolLessonProgress, [lesson.id]: { completedAt: new Date().toISOString() } };
+    setSchoolLessonProgress(next);
+    window.localStorage.setItem("lord-school-lesson-progress", JSON.stringify(next));
+    void saveToCloud({ schoolLessonProgress: next });
+    setNotice(`Aula ${lesson.number} concluída. As 10 questões de ${lesson.topic} foram liberadas.`);
+  }
+
+  function openSchoolQuestions(subject: SchoolQuestionFocus["subject"], topic: string) {
+    setSchoolQuestionFocus({ subject, topic, nonce: Date.now() });
+    setView("questions");
   }
 
   function openQuestionForSkill(skill: SkillWithId) {
@@ -549,9 +576,9 @@ export default function StudyDashboard() {
         <section className="dashboard-split"><div className="section-block"><div className="section-heading"><div><span className="eyebrow">SUAS TRILHAS</span><h2>Próxima de cada matéria</h2></div><button className="text-button" onClick={() => { setSelectedSubject("all"); setView("courses"); }}>Abrir mapa completo</button></div><div className="course-mini-grid">{subjects.map((subject) => { const lesson = nextBySubject[subject.id]; const completed = lessons.filter((item) => item.subject === subject.id && progress[item.id] === "done").length; const total = lessons.filter((item) => item.subject === subject.id).length; return <button className="course-mini" key={subject.id} onClick={() => goToSubject(subject.id)} style={{ "--accent": subject.color } as React.CSSProperties}><span className="course-icon">{subject.icon}</span><div><strong>{subject.name}</strong><small>{lesson.title}</small><div className="mini-progress"><span style={{ width: `${(completed / total) * 100}%` }} /></div></div><b>{completed}/{total}</b></button>; })}</div></div><div className="section-block task-preview"><div className="section-heading"><div><span className="eyebrow">NÃO ESQUECER</span><h2>Tarefas abertas</h2></div><button className="text-button" onClick={() => setView("tasks")}>Gerenciar</button></div><div className="task-list compact">{tasks.filter((task) => !task.done).slice(0, 4).map((task) => <label className="task-row" key={task.id}><input type="checkbox" checked={task.done} onChange={() => toggleTask(task)} /><span><strong>{task.title}</strong><small>{task.category}{task.dueDate ? ` · ${task.dueDate.split("-").reverse().join("/")}` : ""}</small></span></label>)}{!tasks.some((task) => !task.done) && <div className="empty-list"><span>✓</span><p>Nenhuma tarefa esquecida.</p></div>}</div></div></section>
       </div>}
 
-      {view === "courses" && studentYear && <div className="page-content courses-page">{selectedSubject === "all" && <><SchoolCurriculum year={studentYear} onOpenQuestions={() => setView("questions")} />{(isHighSchool(studentYear) || isOwner(user?.email)) && <section className="advanced-track"><div className="intro-row"><div><span className="eyebrow">PREPARAÇÃO AVANÇADA · ENEM</span><h2>Mapa competitivo e projetos</h2><p>Este material é indicado para o Ensino Médio. Sua conta de dono sempre consegue acessá-lo para administrar e revisar.</p></div></div>{renderSubjectHub()}</section>}</>}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && <>{isEnemSubject(selectedSubject) ? renderEnemCourse(selectedSubject) : <><section className="intro-row course-detail-head"><div><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><span className="eyebrow">CONTEÚDO PRONTO</span><h2>{subjectById(selectedSubject).name}</h2><p>{subjectById(selectedSubject).description}</p></div></section>{renderClassicCourse(selectedSubject)}</>}</>}</div>}
+      {view === "courses" && studentYear && <div className="page-content courses-page">{selectedSubject === "all" && <><SchoolCurriculum year={studentYear} progress={schoolLessonProgress} onCompleteLesson={completeSchoolLesson} onOpenQuestions={openSchoolQuestions} />{(isHighSchool(studentYear) || isOwner(user?.email)) && <section className="advanced-track"><div className="intro-row"><div><span className="eyebrow">PREPARAÇÃO AVANÇADA · ENEM</span><h2>Mapa competitivo e projetos</h2><p>Este material é indicado para o Ensino Médio. Sua conta de dono sempre consegue acessá-lo para administrar e revisar.</p></div></div>{renderSubjectHub()}</section>}</>}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && <>{isEnemSubject(selectedSubject) ? renderEnemCourse(selectedSubject) : <><section className="intro-row course-detail-head"><div><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><span className="eyebrow">CONTEÚDO PRONTO</span><h2>{subjectById(selectedSubject).name}</h2><p>{subjectById(selectedSubject).description}</p></div></section>{renderClassicCourse(selectedSubject)}</>}</>}</div>}
 
-      {view === "questions" && studentYear && <QuestionBank key={`${user?.uid ?? "local"}-${studentYear}-${questionFocus?.nonce ?? 0}`} schoolYear={studentYear} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} />}
+      {view === "questions" && studentYear && <QuestionBank key={`${user?.uid ?? "local"}-${studentYear}-${questionFocus?.nonce ?? 0}-${schoolQuestionFocus?.nonce ?? 0}`} schoolYear={studentYear} progress={questionProgress} focus={questionFocus} schoolFocus={schoolQuestionFocus} lessonProgress={schoolLessonProgress} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} onOpenLessons={() => setView("courses")} />}
 
       {view === "admin" && user && isOwner(user.email) && <AdminPanel user={user} onNotice={setNotice} />}
 

@@ -33,7 +33,7 @@ service cloud.firestore {
         && request.resource.data.ra == request.resource.data.raKey
         && request.resource.data.raDigit is string
         && request.resource.data.raDigit.matches('^[0-9A-Z]{1,2}$')
-        && request.resource.data.entrySchoolYear in ['6ef', '7ef', '8ef', '9ef', '1em', '2em', '3em']
+        && request.resource.data.entrySchoolYear in ['5ef', '6ef', '7ef', '8ef', '9ef', '1em', '2em', '3em']
         && request.resource.data.schoolYear == request.resource.data.entrySchoolYear
         && request.resource.data.entryAcademicYear is int
         && request.resource.data.entryAcademicYear >= 2020

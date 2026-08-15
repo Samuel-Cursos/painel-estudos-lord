@@ -1,6 +1,6 @@
 # Atualizar o Painel de Estudos do Lord
 
-Este pacote contém o site completo para estudantes do 6º ano do Fundamental à 3ª série do Ensino Médio. São 5.400 atividades organizadas por série e matéria, lobby com Google, RA único, cadastro escolar protegido, avanço automático de série, 55 questões rápidas corrigidas, o caderno SAME com 1.000 questões para o Ensino Médio, checks de aprendizado e a Central ADM.
+Este pacote contém o site completo para estudantes do 5º ano do Fundamental à 3ª série do Ensino Médio. São 600 aulas autorais e 6.000 atividades organizadas por série e matéria, lobby com Google, RA único, cadastro escolar protegido, avanço automático de série, 55 questões rápidas corrigidas, o caderno SAME com 1.000 questões para o Ensino Médio, checks de aprendizado e a Central ADM.
 
 ## 1. Abrir e testar no VS Code
 
@@ -49,7 +49,7 @@ git config user.email "samuelreisalves765@gmail.com"
 git branch -M main
 if (git remote | Select-String -Quiet '^origin$') { git remote set-url origin https://github.com/Samuel-Cursos/painel-estudos-lord.git } else { git remote add origin https://github.com/Samuel-Cursos/painel-estudos-lord.git }
 git add .
-git commit -m "Adiciona lobby e cadastro escolar protegido"
+git commit -m "Adiciona trilhas autorais e questões por aula"
 git push -u origin main
 ```
 
@@ -65,8 +65,10 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 - O RA é único: não pode ser usado por duas contas Google.
 - A série é escolhida uma vez e avança automaticamente a cada novo ano letivo, parando na 3ª série.
 - A senha nunca passa pelo site, Firestore ou ADM: ela fica protegida no Google.
-- Cada série recebe somente suas matérias, 10 unidades por matéria e 100 atividades por matéria.
-- A escolha funciona sem login neste aparelho e sincroniza entre aparelhos quando a pessoa entra com Google.
+- Cada série recebe somente suas matérias, com 10 aulas e 100 atividades por matéria.
+- A trilha vai de Nivelamento a Domínio. A pessoa estuda teoria, conceitos, exemplo e prática guiada antes de liberar cada bloco de 10 questões.
+- Aulas seguintes ficam bloqueadas até a conclusão da etapa anterior; questões futuras não aparecem antecipadamente.
+- O progresso das aulas e das respostas sincroniza entre celular e computador pela conta Google.
 - Alunos do Ensino Médio veem o caderno SAME em texto; dono e pessoas liberadas também veem o PDF original reconstruído das partes protegidas do Firestore.
 - Só `samuelreisalves765@gmail.com` enxerga a Central ADM e tem acesso permanente a tudo.
 - Para liberar alguém, essa pessoa precisa entrar com Google uma vez; depois aparece na lista do ADM.

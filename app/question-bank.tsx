@@ -15,7 +15,8 @@ import { questionText } from "./question-text-data";
 import { firestore } from "./firebase-client";
 import { isOwner, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
 import PracticeLibrary from "./practice-library";
-import SchoolQuestionBank from "./school-question-bank";
+import SchoolQuestionBank, { type SchoolQuestionFocus } from "./school-question-bank";
+import type { SchoolLessonProgress } from "./school-lesson-data";
 import { isHighSchool, yearLabel, type SchoolYear } from "./school-data";
 
 export type QuestionAttempt = {
@@ -32,6 +33,8 @@ type Props = {
   schoolYear: SchoolYear;
   progress: QuestionProgressMap;
   focus?: QuestionFocus | null;
+  schoolFocus?: SchoolQuestionFocus | null;
+  lessonProgress: SchoolLessonProgress;
   user: User | null;
   pdfAllowed: boolean;
   pdfEnabled: boolean;
@@ -39,6 +42,7 @@ type Props = {
   dailyQuestionGoal: number;
   onProgressChange: (next: QuestionProgressMap) => void;
   onNotice: (message: string) => void;
+  onOpenLessons: () => void;
 };
 
 type PdfState = "loading" | "ready" | "error";
@@ -147,7 +151,7 @@ function TextQuestion({ question }: { question: Question }) {
   return <div className="text-question-document">{content?.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content?.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
 }
 
-export default function QuestionBank({ schoolYear, progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
+export default function QuestionBank({ schoolYear, progress, focus, schoolFocus, lessonProgress, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice, onOpenLessons }: Props) {
   const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : questionChapters[0];
   const initialQuestion = focus
     ? questions.find((question) => question.chapterId === initialChapter.id && !progress[question.id]?.answer)
@@ -266,7 +270,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   const activeAttempt = activeQuestion ? progress[activeQuestion.id] ?? {} : {};
 
   return <div className="page-content question-page">
-    <SchoolQuestionBank year={schoolYear} progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} />
+    <SchoolQuestionBank key={`${schoolYear}-${schoolFocus?.nonce ?? 0}`} year={schoolYear} progress={progress} lessonProgress={lessonProgress} focus={schoolFocus} onProgressChange={onProgressChange} onNotice={onNotice} onOpenLessons={onOpenLessons} />
     {showSame ? <div className="same-bank-section">
     <section className="question-hero">
       <div>

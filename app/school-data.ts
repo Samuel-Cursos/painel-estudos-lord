@@ -1,7 +1,8 @@
-export type SchoolYear = "6ef" | "7ef" | "8ef" | "9ef" | "1em" | "2em" | "3em";
+export type SchoolYear = "5ef" | "6ef" | "7ef" | "8ef" | "9ef" | "1em" | "2em" | "3em";
 export type SchoolSubject = "portuguese" | "math" | "english" | "science" | "biology" | "chemistry" | "physics" | "history" | "geography" | "philosophy" | "sociology";
 
 export const schoolYears: Array<{ id: SchoolYear; label: string; short: string; stage: "fundamental" | "medio" }> = [
+  { id: "5ef", label: "5º ano do Ensino Fundamental", short: "5º ano", stage: "fundamental" },
   { id: "6ef", label: "6º ano do Ensino Fundamental", short: "6º ano", stage: "fundamental" },
   { id: "7ef", label: "7º ano do Ensino Fundamental", short: "7º ano", stage: "fundamental" },
   { id: "8ef", label: "8º ano do Ensino Fundamental", short: "8º ano", stage: "fundamental" },
@@ -26,6 +27,7 @@ export const schoolSubjectMeta: Record<SchoolSubject, { name: string; short: str
 };
 
 const portuguese: Record<SchoolYear, string[]> = {
+  "5ef": ["Leitura e tema central", "Informação explícita e inferência", "Substantivos", "Adjetivos", "Pronomes", "Verbos", "Pontuação", "Ortografia", "Narrativa e diálogo", "Produção de texto"],
   "6ef": ["Leitura e compreensão", "Substantivos e adjetivos", "Artigos e numerais", "Pronomes", "Verbos e tempos verbais", "Pontuação", "Ortografia", "Narrativa", "Poema e linguagem figurada", "Produção de parágrafo"],
   "7ef": ["Interpretação e inferência", "Sujeito e predicado", "Tipos de sujeito", "Verbos transitivos", "Advérbios", "Conjunções", "Crônica", "Notícia", "Coesão textual", "Produção narrativa"],
   "8ef": ["Gêneros argumentativos", "Termos da oração", "Vozes verbais", "Complemento nominal", "Aposto e vocativo", "Figuras de linguagem", "Concordância verbal", "Concordância nominal", "Artigo de opinião", "Revisão textual"],
@@ -36,6 +38,7 @@ const portuguese: Record<SchoolYear, string[]> = {
 };
 
 const math: Record<SchoolYear, string[]> = {
+  "5ef": ["Sistema de numeração decimal", "Adição e subtração", "Multiplicação e divisão", "Múltiplos e divisores", "Frações", "Números decimais", "Porcentagem inicial", "Figuras geométricas", "Perímetro e área", "Tabelas e gráficos"],
   "6ef": ["Números naturais", "Operações fundamentais", "Múltiplos e divisores", "Frações", "Números decimais", "Porcentagem inicial", "Razão", "Ângulos", "Perímetro e área", "Tabelas e gráficos"],
   "7ef": ["Números inteiros", "Números racionais", "Expressões algébricas", "Equações do 1º grau", "Proporcionalidade", "Porcentagem", "Triângulos", "Áreas", "Média aritmética", "Probabilidade inicial"],
   "8ef": ["Potenciação e radiciação", "Notação científica", "Polinômios", "Produtos notáveis", "Sistemas de equações", "Ângulos e polígonos", "Teorema de Pitágoras", "Volume", "Estatística", "Probabilidade"],
@@ -46,6 +49,7 @@ const math: Record<SchoolYear, string[]> = {
 };
 
 const english: Record<SchoolYear, string[]> = {
+  "5ef": ["Greetings", "Alphabet", "Numbers and ages", "Colors", "School objects", "Family", "Personal pronouns", "Verb to be", "Likes and dislikes", "Short instructions"],
   "6ef": ["Greetings", "Alphabet and spelling", "Numbers", "Colors", "Family", "School objects", "Verb to be", "Personal pronouns", "Simple instructions", "Daily vocabulary"],
   "7ef": ["Simple present", "Daily routine", "Adverbs of frequency", "There is and there are", "Places in town", "Can and cannot", "Prepositions", "Food vocabulary", "Questions", "Short texts"],
   "8ef": ["Simple past", "Regular verbs", "Irregular verbs", "Past of verb to be", "Comparatives", "Superlatives", "Travel vocabulary", "Countable nouns", "Some and any", "Reading strategies"],
@@ -56,6 +60,7 @@ const english: Record<SchoolYear, string[]> = {
 };
 
 const history: Record<SchoolYear, string[]> = {
+  "5ef": ["O que é História", "Fontes históricas", "Memória e patrimônio", "Formação dos povos", "Povos originários do Brasil", "Culturas africanas", "Chegada dos portugueses", "Colonização", "Trabalho e resistência", "Cidadania e diversidade"],
   "6ef": ["Tempo histórico", "Fontes históricas", "Pré-história", "Mesopotâmia", "Egito Antigo", "Hebreus e fenícios", "Grécia Antiga", "Roma Antiga", "Povos africanos antigos", "Povos originários da América"],
   "7ef": ["Feudalismo", "Império Bizantino", "Mundo islâmico", "Renascimento", "Reformas religiosas", "Grandes navegações", "Povos americanos", "Colonização portuguesa", "Escravidão colonial", "Economia açucareira"],
   "8ef": ["Iluminismo", "Revolução Industrial", "Independência dos EUA", "Revolução Francesa", "Era Napoleônica", "Independências americanas", "Brasil Império", "Abolicionismo", "Imperialismo", "Proclamação da República"],
@@ -66,6 +71,7 @@ const history: Record<SchoolYear, string[]> = {
 };
 
 const geography: Record<SchoolYear, string[]> = {
+  "5ef": ["Lugar e paisagem", "Município e território", "Orientação", "Mapas e legendas", "Regiões do Brasil", "População", "Espaço urbano", "Espaço rural", "Recursos naturais", "Meio ambiente"],
   "6ef": ["Paisagem", "Lugar e território", "Orientação", "Cartografia", "Relevo", "Clima", "Hidrografia", "Vegetação", "Espaço rural", "Espaço urbano"],
   "7ef": ["Território brasileiro", "Regiões do Brasil", "População brasileira", "Migrações", "Urbanização", "Industrialização", "Agropecuária", "Biomas brasileiros", "Recursos naturais", "Desigualdades regionais"],
   "8ef": ["Continente americano", "América Latina", "Estados Unidos e Canadá", "África", "Colonialismo", "População mundial", "Migrações internacionais", "Globalização", "Blocos econômicos", "Conflitos territoriais"],
@@ -76,6 +82,7 @@ const geography: Record<SchoolYear, string[]> = {
 };
 
 const science: Record<SchoolYear, string[]> = {
+  "5ef": ["Matéria e propriedades", "Misturas", "Água e ciclo da água", "Alimentação e nutrientes", "Sistema digestório", "Sistema respiratório", "Sistema circulatório", "Microrganismos", "Energia", "Sistema Solar"],
   "6ef": ["Matéria e transformações", "Misturas", "Água", "Solo", "Atmosfera", "Célula", "Seres vivos", "Cadeias alimentares", "Corpo humano", "Sistema Solar"],
   "7ef": ["Ecossistemas", "Biodiversidade", "Classificação dos seres vivos", "Vírus e bactérias", "Fungos", "Plantas", "Animais", "Saúde pública", "Calor e temperatura", "Máquinas simples"],
   "8ef": ["Sistema digestório", "Sistema respiratório", "Sistema circulatório", "Sistema nervoso", "Reprodução", "Sexualidade e saúde", "Energia", "Eletricidade", "Luz", "Som"],
@@ -84,35 +91,35 @@ const science: Record<SchoolYear, string[]> = {
 };
 
 const biology: Record<SchoolYear, string[]> = {
-  "6ef": [], "7ef": [], "8ef": [], "9ef": [],
+  "5ef": [], "6ef": [], "7ef": [], "8ef": [], "9ef": [],
   "1em": ["Bioquímica", "Citologia", "Membrana plasmática", "Organelas", "Metabolismo energético", "Divisão celular", "Histologia", "Vírus", "Bactérias", "Ecologia"],
   "2em": ["Classificação biológica", "Botânica", "Zoologia", "Fisiologia humana", "Sistema endócrino", "Imunologia", "Doenças", "Reprodução", "Embriologia", "Ecologia de populações"],
   "3em": ["Genética", "Leis de Mendel", "Biotecnologia", "Evolução", "Seleção natural", "Relações ecológicas", "Ciclos biogeoquímicos", "Impactos ambientais", "Fisiologia comparada", "Revisão ENEM"],
 };
 
 const chemistry: Record<SchoolYear, string[]> = {
-  "6ef": [], "7ef": [], "8ef": [], "9ef": [],
+  "5ef": [], "6ef": [], "7ef": [], "8ef": [], "9ef": [],
   "1em": ["Matéria e energia", "Modelos atômicos", "Tabela periódica", "Ligações químicas", "Geometria molecular", "Polaridade", "Funções inorgânicas", "Reações químicas", "Balanceamento", "Cálculos químicos"],
   "2em": ["Soluções", "Concentração", "Termoquímica", "Cinética química", "Equilíbrio químico", "Equilíbrio iônico", "Eletroquímica", "Radioatividade", "Gases", "Propriedades coligativas"],
   "3em": ["Química orgânica", "Funções orgânicas", "Isomeria", "Reações orgânicas", "Polímeros", "Petróleo", "Química ambiental", "Estequiometria", "Eletroquímica aplicada", "Revisão ENEM"],
 };
 
 const physics: Record<SchoolYear, string[]> = {
-  "6ef": [], "7ef": [], "8ef": [], "9ef": [],
+  "5ef": [], "6ef": [], "7ef": [], "8ef": [], "9ef": [],
   "1em": ["Grandezas físicas", "Cinemática", "Movimento uniforme", "Movimento variado", "Vetores", "Leis de Newton", "Forças", "Trabalho", "Energia", "Quantidade de movimento"],
   "2em": ["Hidrostática", "Gravitação", "Termologia", "Calorimetria", "Termodinâmica", "Ondulatória", "Som", "Óptica geométrica", "Espelhos", "Lentes"],
   "3em": ["Eletrostática", "Campo elétrico", "Potencial elétrico", "Eletrodinâmica", "Circuitos", "Magnetismo", "Eletromagnetismo", "Física moderna", "Energia e potência", "Revisão ENEM"],
 };
 
 const philosophy: Record<SchoolYear, string[]> = {
-  "6ef": [], "7ef": [], "8ef": [], "9ef": [],
+  "5ef": [], "6ef": [], "7ef": [], "8ef": [], "9ef": [],
   "1em": ["Origem da filosofia", "Mito e razão", "Pré-socráticos", "Sócrates", "Platão", "Aristóteles", "Lógica", "Ética antiga", "Filosofia helenística", "Conhecimento"],
   "2em": ["Filosofia medieval", "Renascimento", "Racionalismo", "Empirismo", "Iluminismo", "Kant", "Filosofia política", "Contrato social", "Ética moderna", "Ciência e método"],
   "3em": ["Marx", "Nietzsche", "Existencialismo", "Escola de Frankfurt", "Ética contemporânea", "Biopolítica", "Democracia", "Direitos humanos", "Tecnologia e sociedade", "Filosofia no ENEM"],
 };
 
 const sociology: Record<SchoolYear, string[]> = {
-  "6ef": [], "7ef": [], "8ef": [], "9ef": [],
+  "5ef": [], "6ef": [], "7ef": [], "8ef": [], "9ef": [],
   "1em": ["Imaginação sociológica", "Socialização", "Cultura", "Etnocentrismo", "Identidade", "Instituições sociais", "Durkheim", "Marx", "Weber", "Métodos de pesquisa"],
   "2em": ["Trabalho", "Capitalismo", "Classes sociais", "Desigualdade", "Poder", "Estado", "Cidadania", "Democracia", "Movimentos sociais", "Mídia"],
   "3em": ["Globalização", "Indústria cultural", "Racismo", "Gênero", "Juventude", "Violência", "Educação", "Meio ambiente", "Tecnologia", "Sociologia no ENEM"],

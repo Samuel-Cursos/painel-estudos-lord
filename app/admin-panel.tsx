@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
-import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
-import { getMetadata, ref, uploadBytes } from "firebase/storage";
-import { defaultAppSettings, isOwner, PROTECTED_PDF_PATH, type AppSettings } from "./access-control";
-import { firestore, firebaseStorage } from "./firebase-client";
+import { Bytes, collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
+import { defaultAppSettings, isOwner, PDF_CHUNK_SIZE, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC, type AppSettings } from "./access-control";
+import { firestore } from "./firebase-client";
 
 type DirectoryUser = { uid: string; email: string; displayName?: string; photoURL?: string; lastSeenAt?: { toDate?: () => Date } };
 
@@ -21,6 +20,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [pdfInfo, setPdfInfo] = useState("Verificando arquivo…");
 
   const loadAdmin = useCallback(async () => {
@@ -36,13 +36,15 @@ export default function AdminPanel({ user, onNotice }: Props) {
       setAllowed(new Set(accessSnapshot.docs.filter((item) => item.data().enabled === true).map((item) => item.id)));
       if (settingsSnapshot.exists()) setSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
       try {
-        const metadata = await getMetadata(ref(firebaseStorage, PROTECTED_PDF_PATH));
-        setPdfInfo(`PDF protegido pronto · ${(metadata.size / 1024 / 1024).toFixed(1)} MB · atualizado em ${new Date(metadata.updated).toLocaleDateString("pt-BR")}`);
+        const metadata = await getDoc(doc(firestore, "protectedMaterials", PROTECTED_PDF_META_DOC));
+        if (!metadata.exists()) throw new Error("missing");
+        const data = metadata.data();
+        setPdfInfo(`PDF protegido pronto · ${(Number(data.size) / 1024 / 1024).toFixed(1)} MB · ${Number(data.chunkCount)} partes seguras`);
       } catch {
         setPdfInfo("Nenhum PDF protegido enviado ainda.");
       }
     } catch {
-      onNotice("O Firebase recusou o painel ADM. Publique as novas regras do Firestore e do Storage.");
+      onNotice("O Firebase recusou o painel ADM. Publique as novas regras do Firestore.");
     } finally {
       setLoading(false);
     }
@@ -94,12 +96,46 @@ export default function AdminPanel({ user, onNotice }: Props) {
     if (file.type !== "application/pdf") return onNotice("Escolha um arquivo PDF.");
     if (file.size > 25 * 1024 * 1024) return onNotice("Use o PDF compacto de até 25 MB que está na pasta private-materials.");
     setUploading(true);
+    setUploadProgress(0);
     try {
-      await uploadBytes(ref(firebaseStorage, PROTECTED_PDF_PATH), file, { contentType: "application/pdf", customMetadata: { access: "admin-controlled", uploadedBy: user.email ?? "owner" } });
-      setPdfInfo(`PDF protegido pronto · ${(file.size / 1024 / 1024).toFixed(1)} MB · atualizado agora`);
-      onNotice("PDF enviado com proteção. Só você e as pessoas liberadas conseguem baixar.");
+      const metadataRef = doc(firestore, "protectedMaterials", PROTECTED_PDF_META_DOC);
+      const previous = await getDoc(metadataRef);
+      const previousData = previous.exists() ? previous.data() : null;
+      const fileBytes = new Uint8Array(await file.arrayBuffer());
+      const version = `v${Date.now()}`;
+      const chunkCount = Math.ceil(fileBytes.length / PDF_CHUNK_SIZE);
+
+      for (let index = 0; index < chunkCount; index += 1) {
+        const start = index * PDF_CHUNK_SIZE;
+        const chunk = fileBytes.slice(start, Math.min(start + PDF_CHUNK_SIZE, fileBytes.length));
+        await setDoc(doc(firestore, PROTECTED_PDF_CHUNKS, `${version}-${String(index).padStart(3, "0")}`), {
+          version,
+          index,
+          bytes: Bytes.fromUint8Array(chunk),
+        });
+        setUploadProgress(Math.round(((index + 1) / chunkCount) * 100));
+      }
+
+      await setDoc(metadataRef, {
+        version,
+        chunkCount,
+        size: file.size,
+        fileName: file.name,
+        contentType: "application/pdf",
+        updatedAt: serverTimestamp(),
+        updatedBy: user.email,
+      });
+
+      if (previousData?.version && previousData.version !== version && Number(previousData.chunkCount) > 0) {
+        for (let index = 0; index < Number(previousData.chunkCount); index += 1) {
+          await deleteDoc(doc(firestore, PROTECTED_PDF_CHUNKS, `${previousData.version}-${String(index).padStart(3, "0")}`)).catch(() => undefined);
+        }
+      }
+
+      setPdfInfo(`PDF protegido pronto · ${(file.size / 1024 / 1024).toFixed(1)} MB · ${chunkCount} partes seguras`);
+      onNotice("PDF enviado ao Firestore gratuito. Só você e as pessoas liberadas conseguem abrir.");
     } catch {
-      onNotice("O upload foi bloqueado. Publique primeiro as novas regras do Storage.");
+      onNotice("O upload foi bloqueado. Publique primeiro as novas regras do Firestore.");
     } finally {
       setUploading(false);
     }
@@ -112,7 +148,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
     <div className="admin-stats"><article><strong>{users.length}</strong><span>pessoas cadastradas</span></article><article><strong>{allowed.size + 1}</strong><span>com acesso ao PDF</span></article><article><strong>{settings.assessmentsEnabled ? "Ativo" : "Pausado"}</strong><span>check de aprendizado</span></article></div>
 
     <section className="admin-grid">
-      <article className="admin-card pdf-admin-card"><div className="admin-card-head"><span className="admin-card-icon">PDF</span><div><span className="eyebrow">MATERIAL PROTEGIDO</span><h3>Caderno SAME</h3></div></div><p>{pdfInfo}</p><label className={`upload-button ${uploading ? "disabled" : ""}`}><input type="file" accept="application/pdf" disabled={uploading} onChange={(event) => void uploadPdf(event.target.files?.[0])} /><span>{uploading ? "Enviando…" : "Enviar ou substituir PDF"}</span></label><small>O arquivo fica em Firebase Storage, fora do GitHub e protegido pelas permissões abaixo.</small></article>
+      <article className="admin-card pdf-admin-card"><div className="admin-card-head"><span className="admin-card-icon">PDF</span><div><span className="eyebrow">MATERIAL PROTEGIDO</span><h3>Caderno SAME</h3></div></div><p>{pdfInfo}</p><label className={`upload-button ${uploading ? "disabled" : ""}`}><input type="file" accept="application/pdf" disabled={uploading} onChange={(event) => void uploadPdf(event.target.files?.[0])} /><span>{uploading ? `Enviando… ${uploadProgress}%` : "Enviar ou substituir PDF"}</span></label><small>O arquivo é dividido em partes protegidas no Firestore gratuito. Nada do PDF vai para o GitHub ou para a Vercel.</small></article>
       <article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">⚙</span><div><span className="eyebrow">REGRAS DO PAINEL</span><h3>Configurações</h3></div></div><label className="admin-toggle"><div><strong>Check antes de concluir</strong><small>Exige uma resposta em cada aula e no estágio Domínio.</small></div><input type="checkbox" checked={settings.assessmentsEnabled} onChange={(event) => void updateSetting("assessmentsEnabled", event.target.checked)} /></label><label className="admin-toggle"><div><strong>PDF protegido ativo</strong><small>Quando desligado, todos usam somente as questões em texto.</small></div><input type="checkbox" checked={settings.pdfEnabled} onChange={(event) => void updateSetting("pdfEnabled", event.target.checked)} /></label></article>
     </section>
 

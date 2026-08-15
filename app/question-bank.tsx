@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { getBytes, ref } from "firebase/storage";
+import { doc, getDoc } from "firebase/firestore";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   Question,
@@ -12,8 +12,8 @@ import {
   questions,
 } from "./question-bank-data";
 import { questionText } from "./question-text-data";
-import { firebaseStorage } from "./firebase-client";
-import { PROTECTED_PDF_PATH } from "./access-control";
+import { firestore } from "./firebase-client";
+import { PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
 import PracticeLibrary from "./practice-library";
 
 export type QuestionAttempt = {
@@ -187,7 +187,26 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
       try {
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        const bytes = await getBytes(ref(firebaseStorage, PROTECTED_PDF_PATH), 25 * 1024 * 1024);
+        const metadataSnapshot = await getDoc(doc(firestore, "protectedMaterials", PROTECTED_PDF_META_DOC));
+        if (!metadataSnapshot.exists()) throw new Error("PDF ainda não enviado");
+        const metadata = metadataSnapshot.data();
+        const chunkCount = Number(metadata.chunkCount);
+        const totalSize = Number(metadata.size);
+        const version = String(metadata.version);
+        if (!Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > 64 || totalSize < 1 || totalSize > 25 * 1024 * 1024) throw new Error("Metadados inválidos");
+
+        const chunkSnapshots = await Promise.all(Array.from({ length: chunkCount }, (_, index) => getDoc(doc(firestore, PROTECTED_PDF_CHUNKS, `${version}-${String(index).padStart(3, "0")}`))));
+        const bytes = new Uint8Array(totalSize);
+        let offset = 0;
+        chunkSnapshots.forEach((snapshot) => {
+          if (!snapshot.exists()) throw new Error("Parte do PDF ausente");
+          const storedBytes = snapshot.data().bytes as { toUint8Array?: () => Uint8Array } | undefined;
+          if (!storedBytes?.toUint8Array) throw new Error("Parte do PDF inválida");
+          const chunk = storedBytes.toUint8Array();
+          bytes.set(chunk, offset);
+          offset += chunk.length;
+        });
+        if (offset !== totalSize) throw new Error("PDF incompleto");
         document = await pdfjs.getDocument({ data: bytes }).promise;
         if (!active) {
           void document.destroy();

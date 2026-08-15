@@ -1,5 +1,7 @@
 export const OWNER_EMAIL = "samuelreisalves765@gmail.com";
-export const PROTECTED_PDF_PATH = "protected/caderno-same.pdf";
+export const PROTECTED_PDF_META_DOC = "cadernoSame";
+export const PROTECTED_PDF_CHUNKS = "protectedMaterialChunks";
+export const PDF_CHUNK_SIZE = 700 * 1024;
 
 export function normalizeEmail(email?: string | null) {
   return (email ?? "").trim().toLocaleLowerCase("pt-BR");

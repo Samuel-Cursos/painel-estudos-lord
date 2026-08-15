@@ -9,6 +9,13 @@ service cloud.firestore {
         && request.auth.token.email == 'samuelreisalves765@gmail.com';
     }
 
+    function canReadProtectedPdf() {
+      return isOwner()
+        || (signedIn()
+          && exists(/databases/$(database)/documents/pdfAccess/$(request.auth.uid))
+          && get(/databases/$(database)/documents/pdfAccess/$(request.auth.uid)).data.enabled == true);
+    }
+
     match /users/{userId}/dashboard/{documentId} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
@@ -32,6 +39,18 @@ service cloud.firestore {
     match /appSettings/main {
       allow read: if true;
       allow write: if isOwner();
+    }
+
+    match /protectedMaterials/{materialId} {
+      allow get: if materialId == 'cadernoSame' && canReadProtectedPdf();
+      allow list: if false;
+      allow create, update, delete: if isOwner();
+    }
+
+    match /protectedMaterialChunks/{chunkId} {
+      allow get: if canReadProtectedPdf();
+      allow list: if false;
+      allow create, update, delete: if isOwner();
     }
   }
 }

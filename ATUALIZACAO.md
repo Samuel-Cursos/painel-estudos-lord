@@ -13,17 +13,18 @@ npm.cmd run dev
 
 Abra o endereço mostrado no terminal (normalmente `http://localhost:3000`).
 
-## 2. Publicar as regras do Firebase
+## 2. Publicar as regras gratuitas do Firebase
 
 No mesmo terminal:
 
 ```powershell
 npm.cmd install -g firebase-tools
 firebase.cmd login
-firebase.cmd deploy --project painel-estudos-491a7 --only firestore:rules,storage
+firebase.cmd use painel-estudos-491a7
+firebase.cmd deploy --project painel-estudos-491a7 --only firestore:rules
 ```
 
-Na primeira publicação das regras do Storage, o Firebase pode pedir para permitir que o Storage consulte o Firestore. Aceite, pois essa consulta é o que protege o PDF por usuário.
+Não ative o Firebase Storage e não faça upgrade para o plano Blaze. O projeto usa somente o Firestore do plano gratuito.
 
 ## 3. Enviar o PDF protegido
 
@@ -33,7 +34,7 @@ Na primeira publicação das regras do Storage, o Firebase pode pedir para permi
 4. Selecione `private-materials/caderno-same.pdf`.
 5. Aguarde a mensagem de upload concluído.
 
-A pasta `private-materials` está no `.gitignore`: o PDF não será enviado ao GitHub ou à Vercel.
+A pasta `private-materials` está no `.gitignore`: o PDF não será enviado ao GitHub ou à Vercel. O painel ADM divide o arquivo em partes menores e as guarda com proteção no Firestore.
 
 ## 4. Mandar esta atualização ao GitHub
 
@@ -60,7 +61,7 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 
 - Sem login: 1.000 questões em texto e treino rápido por matéria.
 - Usuário logado sem permissão: mesma versão em texto, com progresso sincronizado.
-- Dono e pessoas liberadas no ADM: enunciado original renderizado do PDF protegido.
+- Dono e pessoas liberadas no ADM: enunciado original reconstruído das partes protegidas do Firestore.
 - Só `samuelreisalves765@gmail.com` enxerga e controla o ADM.
 - Para liberar alguém, essa pessoa precisa entrar com Google uma vez; depois aparece na lista do ADM.
 

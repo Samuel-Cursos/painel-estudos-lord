@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { Lesson, lessons, subjects } from "./course-data";
+import { Lesson, lessons } from "./course-data";
 import { enemData, EnemLevel, EnemSkill, EnemSubjectId } from "./enem-data";
 import { firebaseAuth, firestore, googleProvider } from "./firebase-client";
 import QuestionBank, { QuestionFocus, QuestionProgressMap } from "./question-bank";
@@ -47,7 +47,7 @@ const studySubjects: SubjectMeta[] = [
   { id: "geography", name: "Geografia", shortName: "GEO", icon: "◎", color: "#e47c38", description: "Espaço, economia, ambiente, campo e geopolítica." },
   { id: "philosophy", name: "Filosofia", shortName: "FIL", icon: "φ", color: "#51a976", description: "Pensadores, ética, política e teoria do conhecimento." },
   { id: "sociology", name: "Sociologia", shortName: "SOC", icon: "S", color: "#dc639a", description: "Sociedade, trabalho, cultura, política e movimentos sociais." },
-  subjects.find((subject) => subject.id === "english")!,
+  { id: "english", name: "Inglês", shortName: "ING", icon: "EN", color: "#7c6cf2", description: "Do básico até conversar e entender textos simples." },
 ];
 
 type SkillWithId = EnemSkill & { id: string };

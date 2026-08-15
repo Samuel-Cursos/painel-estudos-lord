@@ -32,6 +32,8 @@ type Props = {
   user: User | null;
   pdfAllowed: boolean;
   pdfEnabled: boolean;
+  publicPracticeEnabled: boolean;
+  dailyQuestionGoal: number;
   onProgressChange: (next: QuestionProgressMap) => void;
   onNotice: (message: string) => void;
 };
@@ -142,7 +144,7 @@ function TextQuestion({ question }: { question: Question }) {
   return <div className="text-question-document">{content?.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content?.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
 }
 
-export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEnabled, onProgressChange, onNotice }: Props) {
+export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
   const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : questionChapters[0];
   const initialQuestion = focus
     ? questions.find((question) => question.chapterId === initialChapter.id && !progress[question.id]?.answer)
@@ -162,7 +164,8 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
 
   const chapters = useMemo(() => questionChapters.filter((chapter) => chapter.subject === subject), [subject]);
   const answeredCount = Object.values(progress).filter((attempt) => Boolean(attempt.answer || attempt.note?.trim())).length;
-  const reviewCount = Object.values(progress).filter((attempt) => attempt.review).length;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const answeredToday = Object.values(progress).filter((attempt) => attempt.answeredAt?.slice(0, 10) === todayKey).length;
 
   const filtered = useMemo(() => {
     const query = normalize(search.trim());
@@ -268,11 +271,11 @@ export default function QuestionBank({ progress, focus, user, pdfAllowed, pdfEna
       <div className="question-stats">
         <article><strong>{answeredCount}</strong><span>respondidas</span></article>
         <article><strong>{1000 - answeredCount}</strong><span>na fila</span></article>
-        <article><strong>{reviewCount}</strong><span>para rever</span></article>
+        <article><strong>{answeredToday}/{dailyQuestionGoal}</strong><span>meta de hoje</span></article>
       </div>
     </section>
 
-    <PracticeLibrary progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} />
+    <PracticeLibrary progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} enabled={publicPracticeEnabled} />
 
     {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 1.000 questões funcionam sem login. O PDF original aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
     {pdfAllowed && !pdfEnabled && <section className="access-mode-banner"><span>OFF</span><div><strong>PDF pausado pelo ADM</strong><p>As questões continuam disponíveis em texto.</p></div></section>}

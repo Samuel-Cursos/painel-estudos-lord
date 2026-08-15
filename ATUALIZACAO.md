@@ -1,6 +1,6 @@
 # Atualizar o Painel de Estudos do Lord
 
-Este pacote já contém o site, as 1.000 questões em texto, os checks de aprendizado, o painel ADM e o PDF compacto em `private-materials/caderno-same.pdf`.
+Este pacote contém o site completo, 55 questões corrigidas nas 11 matérias, o caderno SAME com 1.000 questões, checks de aprendizado e a nova Central ADM.
 
 ## 1. Abrir e testar no VS Code
 
@@ -26,13 +26,15 @@ firebase.cmd deploy --project painel-estudos-491a7 --only firestore:rules
 
 Não ative o Firebase Storage e não faça upgrade para o plano Blaze. O projeto usa somente o Firestore do plano gratuito.
 
-## 3. Enviar o PDF protegido
+As novas regras são obrigatórias para o ADM conseguir ler o progresso dos usuários, publicar questões e registrar o histórico administrativo.
+
+## 3. Conferir o PDF protegido
 
 1. Entre no site com `samuelreisalves765@gmail.com`.
 2. Abra **ADM** no menu.
-3. Em **Caderno SAME**, clique em **Enviar ou substituir PDF**.
-4. Selecione `private-materials/caderno-same.pdf`.
-5. Aguarde a mensagem de upload concluído.
+3. Abra **ADM → Conteúdo**.
+4. Se o cartão disser **PDF protegido pronto**, não envie novamente.
+5. Se estiver vazio, clique em **Enviar ou substituir PDF** e escolha seu PDF compacto de até 25 MB.
 
 A pasta `private-materials` está no `.gitignore`: o PDF não será enviado ao GitHub ou à Vercel. O painel ADM divide o arquivo em partes menores e as guarda com proteção no Firestore.
 
@@ -47,7 +49,7 @@ git config user.email "samuelreisalves765@gmail.com"
 git branch -M main
 if (git remote | Select-String -Quiet '^origin$') { git remote set-url origin https://github.com/Samuel-Cursos/painel-estudos-lord.git } else { git remote add origin https://github.com/Samuel-Cursos/painel-estudos-lord.git }
 git add .
-git commit -m "Adiciona ADM, PDF protegido e checks de aprendizado"
+git commit -m "Adiciona banco completo e Central ADM"
 git push -u origin main
 ```
 
@@ -59,11 +61,20 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 
 ## Como funciona o acesso
 
-- Sem login: 1.000 questões em texto e treino rápido por matéria.
+- Sem login: 1.000 questões em texto e banco corrigido das 11 matérias.
 - Usuário logado sem permissão: mesma versão em texto, com progresso sincronizado.
 - Dono e pessoas liberadas no ADM: enunciado original reconstruído das partes protegidas do Firestore.
-- Só `samuelreisalves765@gmail.com` enxerga e controla o ADM.
+- Só `samuelreisalves765@gmail.com` enxerga a Central ADM e tem acesso permanente a tudo.
 - Para liberar alguém, essa pessoa precisa entrar com Google uma vez; depois aparece na lista do ADM.
+
+## O que a nova Central ADM controla
+
+- Visão geral de usuários, etapas concluídas, questões respondidas e tarefas abertas.
+- Progresso individual, última atividade, permissão do PDF, bloqueio do painel e zeragem real em todos os aparelhos.
+- Criação e exclusão de questões de múltipla escolha ou resposta escrita.
+- Upload e substituição do PDF protegido.
+- Check de conclusão, banco público, PDF, modo manutenção, aviso geral e meta diária.
+- Histórico das últimas ações administrativas.
 
 ## Material futuro de terceiros
 

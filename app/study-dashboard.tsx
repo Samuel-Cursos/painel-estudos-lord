@@ -127,6 +127,7 @@ export default function StudyDashboard() {
   const [cloudReady, setCloudReady] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>("offline");
   const [pdfAllowed, setPdfAllowed] = useState(false);
+  const [siteBlocked, setSiteBlocked] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
 
   useEffect(() => {
@@ -166,6 +167,7 @@ export default function StudyDashboard() {
     if (!currentUser) {
       setSyncState("offline");
       setPdfAllowed(false);
+      setSiteBlocked(false);
       setView((current) => current === "admin" ? "today" : current);
       return;
     }
@@ -179,12 +181,21 @@ export default function StudyDashboard() {
         photoURL: currentUser.photoURL ?? "",
         lastSeenAt: serverTimestamp(),
       }, { merge: true });
-      const [accessSnapshot, settingsSnapshot] = await Promise.all([
+      const [accessSnapshot, controlsSnapshot, settingsSnapshot] = await Promise.all([
         getDoc(doc(firestore, "pdfAccess", currentUser.uid)),
+        getDoc(doc(firestore, "userControls", currentUser.uid)),
         getDoc(doc(firestore, "appSettings", "main")),
       ]);
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
+      setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
+      const resetToken = controlsSnapshot.exists() ? Number(controlsSnapshot.data().resetToken ?? 0) : 0;
+      const previousResetToken = Number(window.localStorage.getItem("lord-admin-reset-token") ?? 0);
+      if (resetToken > previousResetToken) {
+        ["lord-focus-progress", "lord-focus-tasks", "lord-enem-progress", "lord-enem-assessments", "lord-question-progress"].forEach((key) => window.localStorage.removeItem(key));
+        setProgress({}); setTasks([]); setSkillProgress({}); setAssessmentResults({}); setQuestionProgress({});
+        window.localStorage.setItem("lord-admin-reset-token", String(resetToken));
+      }
       const dashboardRef = doc(firestore, "users", currentUser.uid, "dashboard", "main");
       const cloudSnapshot = await getDoc(dashboardRef);
 
@@ -432,6 +443,8 @@ export default function StudyDashboard() {
 
     <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button>{user ? <button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button> : <button className="google-login" onClick={connectGoogle} disabled={authLoading}><span>G</span>{authLoading ? "Abrindo..." : "Entrar com Google"}</button>}</div></header>
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+      {appSettings.announcementEnabled && appSettings.announcement.trim() && <div className="global-announcement"><strong>AVISO DO ADM</strong><span>{appSettings.announcement}</span></div>}
+      {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso ao painel foi pausado pelo ADM." : "O Lord está atualizando o painel."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso salvo continua seguro."}</p></div></div>}
 
       {view === "today" && <div className="page-content today-page"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMA AÇÃO</span>{todaySchedule.length ? <><h2>Hoje você só precisa começar.</h2><p>{todaySchedule.length === 1 ? "Uma sessão planejada" : `${todaySchedule.length} sessões planejadas`} para hoje. O conteúdo já está escolhido.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedLesson(nextBySubject[todaySchedule[0].subject])}>Abrir aula de agora →</button><span>Comece com 5 minutos</span></div></> : <><h2>Hoje é dia leve.</h2><p>Quarta, quinta e domingo ficam protegidos para culto, música e descanso. Se quiser adiantar algo, faça apenas o modo mínimo.</p><div className="hero-actions"><button className="primary" onClick={() => setView("tasks")}>Ver tarefas rápidas →</button><span>Sem criar dívida</span></div></>}</div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">{todaySchedule.length ? subjectById(todaySchedule[0].subject).icon : "✓"}</div></div></section>
         <section className="section-block"><div className="section-heading"><div><span className="eyebrow">ROTEIRO DE HOJE</span><h2>Chegue e faça</h2></div><span className="muted">Nada para pesquisar</span></div><div className="today-grid">{todaySchedule.length ? todaySchedule.map((slot, index) => { const lesson = nextBySubject[slot.subject]; const subject = subjectById(slot.subject); return <article className="today-card" key={`${slot.time}-${slot.subject}`} style={{ "--accent": subject.color } as React.CSSProperties}><div className="time-column"><strong>{slot.time}</strong><span>{index + 1}</span></div><div className="today-card-body"><div className="card-kicker"><span className="subject-dot" />{subject.name} · aula {lesson.number}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p><div className="card-footer"><span>{lesson.duration}</span><button onClick={() => setSelectedLesson(lesson)}>Abrir aula →</button></div></div></article>; }) : <article className="empty-day"><strong>Sem aula obrigatória hoje</strong><p>Abra “Tarefas” se houver algo da escola. Caso contrário, cumpra seus compromissos e descanse.</p></article>}</div></section>
@@ -440,7 +453,7 @@ export default function StudyDashboard() {
 
       {view === "courses" && <div className="page-content courses-page">{selectedSubject === "all" && <><section className="intro-row"><div><span className="eyebrow">CONTEÚDO COMPLETO</span><h2>Escolha uma matéria</h2><p>O cronograma inteiro do PDF foi separado em áreas. Inglês e Programação continuam com as aulas que já estavam prontas.</p></div></section>{renderSubjectHub()}</>}{selectedSubject === "exams" && renderAssessmentTracker()}{selectedSubject !== "all" && selectedSubject !== "exams" && <>{isEnemSubject(selectedSubject) ? renderEnemCourse(selectedSubject) : <><section className="intro-row course-detail-head"><div><button className="back-link" onClick={() => setSelectedSubject("all")}>← Todas as matérias</button><span className="eyebrow">CONTEÚDO PRONTO</span><h2>{subjectById(selectedSubject).name}</h2><p>{subjectById(selectedSubject).description}</p></div></section>{renderClassicCourse(selectedSubject)}</>}</>}</div>}
 
-      {view === "questions" && <QuestionBank key={`${user?.uid ?? "local"}-${questionFocus?.nonce ?? 0}`} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} onProgressChange={updateQuestionProgress} onNotice={setNotice} />}
+      {view === "questions" && <QuestionBank key={`${user?.uid ?? "local"}-${questionFocus?.nonce ?? 0}`} progress={questionProgress} focus={questionFocus} user={user} pdfAllowed={pdfAllowed} pdfEnabled={appSettings.pdfEnabled} publicPracticeEnabled={appSettings.publicPracticeEnabled} dailyQuestionGoal={appSettings.dailyQuestionGoal} onProgressChange={updateQuestionProgress} onNotice={setNotice} />}
 
       {view === "admin" && user && isOwner(user.email) && <AdminPanel user={user} onNotice={setNotice} />}
 

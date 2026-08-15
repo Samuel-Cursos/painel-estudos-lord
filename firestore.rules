@@ -17,7 +17,9 @@ service cloud.firestore {
     }
 
     match /users/{userId}/dashboard/{documentId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+      allow read: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow create, update: if signedIn() && request.auth.uid == userId;
+      allow delete: if isOwner() || (signedIn() && request.auth.uid == userId);
     }
 
     match /userDirectory/{userId} {
@@ -36,9 +38,23 @@ service cloud.firestore {
       allow list, create, update, delete: if isOwner();
     }
 
+    match /userControls/{userId} {
+      allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow list, create, update, delete: if isOwner();
+    }
+
     match /appSettings/main {
       allow read: if true;
       allow write: if isOwner();
+    }
+
+    match /customQuestions/{questionId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner();
+    }
+
+    match /adminAudit/{entryId} {
+      allow read, create, update, delete: if isOwner();
     }
 
     match /protectedMaterials/{materialId} {

@@ -14,9 +14,19 @@ export function isOwner(email?: string | null) {
 export type AppSettings = {
   assessmentsEnabled: boolean;
   pdfEnabled: boolean;
+  publicPracticeEnabled: boolean;
+  maintenanceMode: boolean;
+  announcementEnabled: boolean;
+  announcement: string;
+  dailyQuestionGoal: number;
 };
 
 export const defaultAppSettings: AppSettings = {
   assessmentsEnabled: true,
   pdfEnabled: true,
+  publicPracticeEnabled: true,
+  maintenanceMode: false,
+  announcementEnabled: false,
+  announcement: "",
+  dailyQuestionGoal: 10,
 };

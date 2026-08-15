@@ -1,6 +1,6 @@
 # Atualizar o Painel de Estudos do Lord
 
-Este pacote contém o site completo para estudantes do 6º ano do Fundamental à 3ª série do Ensino Médio. São 5.400 atividades organizadas por série e matéria, 55 questões rápidas corrigidas, o caderno SAME com 1.000 questões para o Ensino Médio, checks de aprendizado e a Central ADM.
+Este pacote contém o site completo para estudantes do 6º ano do Fundamental à 3ª série do Ensino Médio. São 5.400 atividades organizadas por série e matéria, lobby com Google, RA único, cadastro escolar protegido, avanço automático de série, 55 questões rápidas corrigidas, o caderno SAME com 1.000 questões para o Ensino Médio, checks de aprendizado e a Central ADM.
 
 ## 1. Abrir e testar no VS Code
 
@@ -26,7 +26,7 @@ firebase.cmd deploy --project painel-estudos-491a7 --only firestore:rules
 
 Não ative o Firebase Storage e não faça upgrade para o plano Blaze. O projeto usa somente o Firestore do plano gratuito.
 
-As novas regras são obrigatórias para salvar a série de cada estudante, permitir que o ADM altere essa série, ler o progresso, publicar questões e registrar o histórico administrativo.
+As novas regras são obrigatórias para reservar cada RA sem duplicidade, proteger nome/RA/e-mail institucional, travar a série escolhida pelo aluno, permitir correções apenas pelo ADM, ler o progresso, publicar questões e registrar o histórico administrativo.
 
 ## 3. Conferir o PDF protegido
 
@@ -49,7 +49,7 @@ git config user.email "samuelreisalves765@gmail.com"
 git branch -M main
 if (git remote | Select-String -Quiet '^origin$') { git remote set-url origin https://github.com/Samuel-Cursos/painel-estudos-lord.git } else { git remote add origin https://github.com/Samuel-Cursos/painel-estudos-lord.git }
 git add .
-git commit -m "Organiza painel por serie escolar"
+git commit -m "Adiciona lobby e cadastro escolar protegido"
 git push -u origin main
 ```
 
@@ -61,7 +61,10 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 
 ## Como funciona o acesso
 
-- No primeiro acesso, o estudante escolhe entre 6º, 7º, 8º, 9º, 1ª, 2ª ou 3ª série.
+- O site só abre depois do login Google e do cadastro com nome, RA, dígito, e-mail institucional e série.
+- O RA é único: não pode ser usado por duas contas Google.
+- A série é escolhida uma vez e avança automaticamente a cada novo ano letivo, parando na 3ª série.
+- A senha nunca passa pelo site, Firestore ou ADM: ela fica protegida no Google.
 - Cada série recebe somente suas matérias, 10 unidades por matéria e 100 atividades por matéria.
 - A escolha funciona sem login neste aparelho e sincroniza entre aparelhos quando a pessoa entra com Google.
 - Alunos do Ensino Médio veem o caderno SAME em texto; dono e pessoas liberadas também veem o PDF original reconstruído das partes protegidas do Firestore.
@@ -71,7 +74,8 @@ Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lo
 ## O que a nova Central ADM controla
 
 - Visão geral de usuários, etapas concluídas, questões respondidas e tarefas abertas.
-- Progresso individual, última atividade, série escolar, permissão do PDF, bloqueio do painel e zeragem real em todos os aparelhos.
+- Progresso individual, última atividade, nome, RA, dígito, e-mail institucional, série/ano de entrada, permissão do PDF, bloqueio do painel e zeragem real em todos os aparelhos.
+- Correção de cadastro pelo ADM e liberação do RA quando o aluno precisa trocar de conta Google.
 - Criação e exclusão de questões de múltipla escolha ou resposta escrita.
 - Upload e substituição do PDF protegido.
 - Check de conclusão, banco público, PDF, modo manutenção, aviso geral e meta diária.

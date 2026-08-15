@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { Lesson, lessons, projectRoadmap, SubjectId, subjects, weeklyPlan } from "./course-data";
 import { enemData, EnemLevel, EnemSkill, EnemSubjectId } from "./enem-data";
 import { firebaseAuth, firestore, googleProvider } from "./firebase-client";
@@ -15,6 +15,8 @@ import { defaultAppSettings, isOwner, type AppSettings } from "./access-control"
 import SchoolCurriculum from "./school-curriculum";
 import StudentProfileSetup from "./student-profile-setup";
 import { isHighSchool, schoolSubjectMeta, schoolYears, subjectsForYear, topicsFor, yearLabel, type SchoolYear } from "./school-data";
+import StudentLobby, { type RegistrationDraft } from "./student-lobby";
+import { currentAcademicYear, currentSchoolYear, isCompleteStudentProfile, normalizeRa, type StudentProfile } from "./student-profile";
 
 type View = "today" | "courses" | "questions" | "projects" | "tasks" | "week" | "admin";
 type Status = "pending" | "done" | "not_done";
@@ -133,6 +135,9 @@ export default function StudyDashboard() {
   const [siteBlocked, setSiteBlocked] = useState(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [studentYear, setStudentYear] = useState<SchoolYear | null>(null);
+  const [legacySchoolYear, setLegacySchoolYear] = useState<SchoolYear | null>(null);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [accountReady, setAccountReady] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
@@ -156,7 +161,7 @@ export default function StudyDashboard() {
         if (savedSkillProgress) setSkillProgress(JSON.parse(savedSkillProgress));
         if (savedAssessments) setAssessmentResults(JSON.parse(savedAssessments));
         if (savedQuestionProgress) setQuestionProgress(JSON.parse(savedQuestionProgress));
-        if (savedSchoolYear && schoolYears.some((item) => item.id === savedSchoolYear)) setStudentYear(savedSchoolYear);
+        if (savedSchoolYear && schoolYears.some((item) => item.id === savedSchoolYear)) { setStudentYear(savedSchoolYear); setLegacySchoolYear(savedSchoolYear); }
       } catch {
         setNotice("O painel abriu, mas não conseguiu ler o progresso salvo neste navegador.");
       } finally {
@@ -168,14 +173,18 @@ export default function StudyDashboard() {
 
   useEffect(() => onAuthStateChanged(firebaseAuth, async (currentUser) => {
     setUser(currentUser);
-    setAuthLoading(false);
+    setAccountReady(false);
     setCloudReady(false);
+    setStudentProfile(null);
 
     if (!currentUser) {
       setSyncState("offline");
       setPdfAllowed(false);
       setSiteBlocked(false);
+      setStudentYear(null);
       setView((current) => current === "admin" ? "today" : current);
+      setAuthLoading(false);
+      setAccountReady(true);
       return;
     }
 
@@ -197,12 +206,19 @@ export default function StudyDashboard() {
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
       setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
-      const cloudYear = profileSnapshot.exists() ? profileSnapshot.data().schoolYear as SchoolYear : null;
       const localYear = window.localStorage.getItem("lord-school-year") as SchoolYear | null;
-      if (cloudYear && schoolYears.some((item) => item.id === cloudYear)) {
-        setStudentYear(cloudYear); window.localStorage.setItem("lord-school-year", cloudYear);
-      } else if (localYear && schoolYears.some((item) => item.id === localYear)) {
-        await setDoc(doc(firestore, "studentProfiles", currentUser.uid), { uid: currentUser.uid, email: currentUser.email, schoolYear: localYear, updatedAt: serverTimestamp() }, { merge: true });
+      const rawProfile = profileSnapshot.exists() ? profileSnapshot.data() : null;
+      if (isCompleteStudentProfile(rawProfile)) {
+        const profile = { ...rawProfile, uid: currentUser.uid, email: currentUser.email ?? rawProfile.email } as StudentProfile;
+        const activeYear = currentSchoolYear(profile);
+        setStudentProfile(profile);
+        setStudentYear(isOwner(currentUser.email) && localYear && schoolYears.some((item) => item.id === localYear) ? localYear : activeYear);
+        window.localStorage.setItem("lord-school-year", activeYear);
+      } else if (isOwner(currentUser.email)) {
+        const ownerYear = localYear && schoolYears.some((item) => item.id === localYear) ? localYear : "3em";
+        setStudentYear(ownerYear);
+      } else {
+        setStudentYear(null);
       }
       const resetToken = controlsSnapshot.exists() ? Number(controlsSnapshot.data().resetToken ?? 0) : 0;
       const previousResetToken = Number(window.localStorage.getItem("lord-admin-reset-token") ?? 0);
@@ -249,10 +265,13 @@ export default function StudyDashboard() {
 
       setCloudReady(true);
       setSyncState("synced");
-      setNotice("Conta conectada. Seu progresso agora acompanha você no celular e no notebook.");
+      if (isCompleteStudentProfile(profileSnapshot.exists() ? profileSnapshot.data() : null) || isOwner(currentUser.email)) setNotice("Conta conectada. Seu progresso agora acompanha você no celular e no notebook.");
     } catch {
       setSyncState("error");
       setNotice("Entrei na conta, mas o Firebase recusou a sincronização. Confira o Firestore e as regras.");
+    } finally {
+      setAuthLoading(false);
+      setAccountReady(true);
     }
   }), []);
 
@@ -285,16 +304,54 @@ export default function StudyDashboard() {
 
   async function disconnectGoogle() {
     await signOut(firebaseAuth);
-    setNotice("Conta desconectada. O painel continua funcionando neste aparelho.");
+    setStudentProfile(null); setStudentYear(null); setProfileOpen(false);
+    setNotice("Conta desconectada.");
   }
 
   async function selectSchoolYear(year: SchoolYear) {
+    if (!isOwner(user?.email)) return;
     setStudentYear(year); setProfileOpen(false); window.localStorage.setItem("lord-school-year", year);
-    if (user) {
-      try {
-        await setDoc(doc(firestore, "studentProfiles", user.uid), { uid: user.uid, email: user.email, schoolYear: year, updatedAt: serverTimestamp() }, { merge: true });
-        setNotice(`Perfil atualizado para ${yearLabel(year)}.`);
-      } catch { setNotice("A série foi salva neste aparelho, mas o Firebase recusou a sincronização."); }
+    setNotice(`Visualização do dono alterada para ${yearLabel(year)}.`);
+  }
+
+  async function registerStudent(draft: RegistrationDraft) {
+    if (!user?.email) return { ok: false, message: "Entre com Google novamente para continuar." };
+    const raKey = normalizeRa(draft.ra);
+    const academicYear = currentAcademicYear();
+    const profile: StudentProfile = {
+      uid: user.uid,
+      email: user.email,
+      name: draft.name,
+      institutionalEmail: draft.institutionalEmail,
+      ra: raKey,
+      raKey,
+      raDigit: draft.raDigit,
+      entrySchoolYear: draft.schoolYear,
+      schoolYear: draft.schoolYear,
+      entryAcademicYear: academicYear,
+      registrationComplete: true,
+    };
+    try {
+      const batch = writeBatch(firestore);
+      batch.set(doc(firestore, "studentRaRegistry", raKey), {
+        uid: user.uid,
+        raKey,
+        raDigit: draft.raDigit,
+        createdAt: serverTimestamp(),
+      });
+      batch.set(doc(firestore, "studentProfiles", user.uid), {
+        ...profile,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      await batch.commit();
+      setStudentProfile(profile);
+      setStudentYear(draft.schoolYear);
+      window.localStorage.setItem("lord-school-year", draft.schoolYear);
+      setNotice(`Cadastro concluído. Seu painel foi preparado para o ${yearLabel(draft.schoolYear)}.`);
+      return { ok: true, message: "Cadastro concluído." };
+    } catch {
+      return { ok: false, message: "Este RA já está cadastrado em outra conta ou as regras novas do Firebase ainda não foram publicadas. Fale com o ADM." };
     }
   }
 
@@ -471,15 +528,21 @@ export default function StudyDashboard() {
     return true;
   });
 
+  const ownerAccount = isOwner(user?.email);
+  const registrationRequired = Boolean(user && !ownerAccount && !studentProfile);
+  if (authLoading || !accountReady || !user || registrationRequired) {
+    return <StudentLobby key={user?.uid ?? "anonymous"} user={user} loading={authLoading || Boolean(user && !accountReady)} suggestedYear={legacySchoolYear} onGoogleLogin={connectGoogle} onRegister={registerStudent} onSignOut={disconnectGoogle} />;
+  }
+
   return <main className="app-shell">
     <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">L</div><div><strong>Lord Focus</strong><span>Painel pessoal</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>{isOwner(user?.email) ? "Mapa completo" : studentYear ? schoolYears.find((item) => item.id === studentYear)?.short : "Sua série"}</strong><span>{sidebarDone} de {sidebarTotal} atividades</span></div></div><div className="sidebar-rule"><span>Regra do painel</span><p>Você não procura o que fazer. Abre, faz a próxima ação e marca.</p></div></aside>
 
-    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions">{studentYear && <button className="grade-profile-button" onClick={() => setProfileOpen(true)}><span>{schoolYears.find((item) => item.id === studentYear)?.short}</span><small>Alterar série</small></button>}<button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button>{user ? <button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button> : <button className="google-login" onClick={connectGoogle} disabled={authLoading}><span>G</span>{authLoading ? "Abrindo..." : "Entrar com Google"}</button>}</div></header>
+    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><div className="academic-year-chip"><span>{currentAcademicYear()}</span><small>ANO LETIVO</small></div>{studentYear && <button className={`grade-profile-button ${ownerAccount ? "owner-control" : "locked"}`} onClick={() => ownerAccount && setProfileOpen(true)} disabled={!ownerAccount} title={ownerAccount ? "Visualizar outra série" : "A série avança automaticamente a cada ano letivo"}><span>{schoolYears.find((item) => item.id === studentYear)?.short}</span><small>{ownerAccount ? "Visualizar série" : "Série automática"}</small></button>}<button className="quick-add" onClick={() => setView("tasks")}>+ Guardar tarefa</button><button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button></div></header>
       {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
       {appSettings.announcementEnabled && appSettings.announcement.trim() && <div className="global-announcement"><strong>AVISO DO ADM</strong><span>{appSettings.announcement}</span></div>}
       {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso ao painel foi pausado pelo ADM." : "O Lord está atualizando o painel."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso salvo continua seguro."}</p></div></div>}
 
-      {view === "today" && studentYear && !isOwner(user?.email) && <div className="page-content grade-home"><section className="grade-home-hero"><div><span className="eyebrow">PAINEL PERSONALIZADO · {yearLabel(studentYear)}</span><h2>Seu conteúdo está na série certa.</h2><p>Escolha uma matéria, estude uma unidade e responda o bloco de atividades. O painel salva tudo para você continuar depois.</p><div><button className="primary" onClick={() => setView("courses")}>Abrir material da série →</button><button className="secondary" onClick={() => setView("questions")}>Resolver questões →</button></div></div><aside><strong>{subjectsForYear(studentYear).length}</strong><span>matérias</span><strong>{subjectsForYear(studentYear).length * 100}</strong><span>atividades</span></aside></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">COMECE POR UMA MATÉRIA</span><h2>Trilhas do {yearLabel(studentYear)}</h2></div></div><div className="grade-home-grid">{subjectsForYear(studentYear).map((subject) => { const meta = schoolSubjectMeta[subject]; return <button key={subject} style={{ "--accent": meta.color } as React.CSSProperties} onClick={() => setView("courses")}><span>{meta.icon}</span><div><strong>{meta.name}</strong><small>Comece por {topicsFor(studentYear, subject)[0]}</small></div><b>→</b></button>; })}</div></section></div>}
+      {view === "today" && studentYear && !isOwner(user?.email) && <div className="page-content grade-home"><section className="grade-home-hero"><div><span className="eyebrow">PAINEL PERSONALIZADO · {yearLabel(studentYear)}</span><h2>Seu conteúdo está na série certa.</h2><p>Escolha uma matéria, estude uma unidade e responda o bloco de atividades. O painel salva tudo para você continuar depois.</p><div><button className="primary" onClick={() => setView("courses")}>Abrir material da série →</button><button className="secondary" onClick={() => setView("questions")}>Resolver questões →</button></div><div className="academic-auto-note"><span>{currentAcademicYear()}</span><p><strong>Ano letivo atual</strong> Em janeiro de {currentAcademicYear() + 1}, sua série avança automaticamente. Na 3ª série, o acesso permanece liberado.</p></div></div><aside><strong>{subjectsForYear(studentYear).length}</strong><span>matérias</span><strong>{subjectsForYear(studentYear).length * 100}</strong><span>atividades</span></aside></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">COMECE POR UMA MATÉRIA</span><h2>Trilhas do {yearLabel(studentYear)}</h2></div></div><div className="grade-home-grid">{subjectsForYear(studentYear).map((subject) => { const meta = schoolSubjectMeta[subject]; return <button key={subject} style={{ "--accent": meta.color } as React.CSSProperties} onClick={() => setView("courses")}><span>{meta.icon}</span><div><strong>{meta.name}</strong><small>Comece por {topicsFor(studentYear, subject)[0]}</small></div><b>→</b></button>; })}</div></section></div>}
 
       {view === "today" && (isOwner(user?.email) || !studentYear) && <div className="page-content today-page"><section className="hero-panel"><div className="hero-copy"><span className="eyebrow">PRÓXIMA AÇÃO</span>{todaySchedule.length ? <><h2>Hoje você só precisa começar.</h2><p>{todaySchedule.length === 1 ? "Uma sessão planejada" : `${todaySchedule.length} sessões planejadas`} para hoje. O conteúdo já está escolhido.</p><div className="hero-actions"><button className="primary" onClick={() => setSelectedLesson(nextBySubject[todaySchedule[0].subject])}>Abrir aula de agora →</button><span>Comece com 5 minutos</span></div></> : <><h2>Hoje é dia leve.</h2><p>Quarta, quinta e domingo ficam protegidos para culto, música e descanso. Se quiser adiantar algo, faça apenas o modo mínimo.</p><div className="hero-actions"><button className="primary" onClick={() => setView("tasks")}>Ver tarefas rápidas →</button><span>Sem criar dívida</span></div></>}</div><div className="hero-orbit" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-core">{todaySchedule.length ? subjectById(todaySchedule[0].subject).icon : "✓"}</div></div></section>
         <section className="section-block"><div className="section-heading"><div><span className="eyebrow">ROTEIRO DE HOJE</span><h2>Chegue e faça</h2></div><span className="muted">Nada para pesquisar</span></div><div className="today-grid">{todaySchedule.length ? todaySchedule.map((slot, index) => { const lesson = nextBySubject[slot.subject]; const subject = subjectById(slot.subject); return <article className="today-card" key={`${slot.time}-${slot.subject}`} style={{ "--accent": subject.color } as React.CSSProperties}><div className="time-column"><strong>{slot.time}</strong><span>{index + 1}</span></div><div className="today-card-body"><div className="card-kicker"><span className="subject-dot" />{subject.name} · aula {lesson.number}</div><h3>{lesson.title}</h3><p>{lesson.goal}</p><div className="card-footer"><span>{lesson.duration}</span><button onClick={() => setSelectedLesson(lesson)}>Abrir aula →</button></div></div></article>; }) : <article className="empty-day"><strong>Sem aula obrigatória hoje</strong><p>Abra “Tarefas” se houver algo da escola. Caso contrário, cumpra seus compromissos e descanse.</p></article>}</div></section>
@@ -509,7 +572,7 @@ export default function StudyDashboard() {
 
     {masterySkill && <MasteryCheck question={skillMasteryQuestion(masterySkill.subject, masterySkill.skill)} title={`${subjectById(masterySkill.subject).name} · ${masterySkill.skill}`} onClose={() => setMasterySkill(null)} onPass={() => { toggleSkillStage(masterySkill, "mastery"); setMasterySkill(null); setSelectedSkill(null); }} />}
 
-    {!loading && (!studentYear || profileOpen) && <StudentProfileSetup user={user} current={studentYear} required={!studentYear} onSelect={(year) => void selectSchoolYear(year)} onClose={() => setProfileOpen(false)} />}
+    {!loading && ownerAccount && profileOpen && <StudentProfileSetup user={user} current={studentYear} onSelect={(year) => void selectSchoolYear(year)} onClose={() => setProfileOpen(false)} />}
 
     {loading && <div className="loading-screen"><div className="loader"/><span>Organizando seu próximo passo...</span></div>}
   </main>;

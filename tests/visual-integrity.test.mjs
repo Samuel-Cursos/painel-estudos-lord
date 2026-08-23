@@ -26,3 +26,18 @@ test("o layout móvel evita cortes e respeita a navegação inferior", async () 
   assert.match(styles, /\.mobile-nav\{[^}]*overflow-x:auto/);
   assert.match(styles, /\.page-content,\.page-content>\*,\.workspace/);
 });
+
+test("avisos somem sozinhos e o menu móvel fecha por fora ou pelo teclado", async () => {
+  const [dashboard, styles] = await Promise.all([
+    read("app/study-dashboard.tsx"),
+    read("app/globals.css"),
+  ]);
+
+  assert.match(dashboard, /window\.setTimeout\(\(\) => setNotice\(""\), 2400\)/);
+  assert.doesNotMatch(dashboard, /Conta conectada\. Seu progresso do ENEM está sincronizado/);
+  assert.match(dashboard, /event\.key === "Escape"/);
+  assert.match(dashboard, /className="sidebar-scrim"/);
+  assert.match(dashboard, /aria-expanded=\{mobileMenu\}/);
+  assert.match(styles, /\.sidebar-scrim\{position:fixed;inset:0;z-index:60;display:block/);
+  assert.match(styles, /animation:notice-enter/);
+});

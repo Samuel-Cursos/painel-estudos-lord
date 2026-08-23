@@ -125,6 +125,28 @@ export default function StudyDashboard() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!mobileMenu) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeMenu = () => setMobileMenu(false);
+    const handleKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") closeMenu(); };
+    const handleResize = () => { if (window.innerWidth > 760) closeMenu(); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [mobileMenu]);
+
   useEffect(() => onAuthStateChanged(firebaseAuth, async (currentUser) => {
     setUser(currentUser); setCloudReady(false); setProfileChecked(false); setStudentProfile(null);
     if (!currentUser) { setSyncState("offline"); setPdfAllowed(false); setSiteBlocked(false); setView((current) => current === "admin" ? "home" : current); setProfileChecked(true); setAuthLoading(false); return; }
@@ -174,7 +196,7 @@ export default function StudyDashboard() {
         const localDashboard: CloudDashboard = { progress: JSON.parse(window.localStorage.getItem("lord-focus-progress") ?? "{}"), skillProgress: JSON.parse(window.localStorage.getItem("lord-enem-progress") ?? "{}"), assessmentResults: JSON.parse(window.localStorage.getItem("lord-enem-assessments") ?? "{}"), examAnswerSheets: JSON.parse(window.localStorage.getItem("clareia-exam-answer-sheets") ?? "{}"), questionProgress: JSON.parse(window.localStorage.getItem("lord-question-progress") ?? "{}"), tasks: JSON.parse(window.localStorage.getItem("lord-focus-tasks") ?? "[]"), essays: JSON.parse(window.localStorage.getItem("clareia-essays") ?? "[]") };
         await setDoc(doc(firestore, "users", currentUser.uid, "dashboard", "main"), { ...localDashboard, updatedAt: serverTimestamp() });
       }
-      setCloudReady(true); setSyncState("synced"); setNotice("Conta conectada. Seu progresso do ENEM está sincronizado.");
+      setCloudReady(true); setSyncState("synced");
     } catch { setSyncState("error"); setNotice("Entrei na conta, mas a sincronização não respondeu. O progresso continua salvo neste aparelho."); }
     finally { setProfileChecked(true); setAuthLoading(false); }
   }), []);
@@ -189,7 +211,7 @@ export default function StudyDashboard() {
     try { await signInWithPopup(firebaseAuth, googleProvider); }
     catch (error) { const code = typeof error === "object" && error && "code" in error ? String(error.code) : ""; if (code !== "auth/popup-closed-by-user") setNotice("Não consegui abrir o login Google. Confira o domínio no Firebase."); }
   }
-  async function disconnectGoogle() { await signOut(firebaseAuth); setNotice("Conta desconectada."); }
+  async function disconnectGoogle() { await signOut(firebaseAuth); }
 
   const skillStageDoneCount = Object.values(skillProgress).reduce((sum, item) => sum + stages.filter((stage) => item[stage.id]).length, 0);
   const answeredCount = Object.values(questionProgress).filter((attempt) => Boolean(attempt.answer || attempt.note?.trim())).length;
@@ -261,9 +283,10 @@ export default function StudyDashboard() {
   if (profileChecked && !studentProfile) return <StudentProfileSetup user={user} onComplete={(profile) => { setStudentProfile(profile); setNotice(`Bem-vindo, ${profile.displayName}. Seu perfil está pronto.`); }} onSignOut={disconnectGoogle} />;
 
   return <main className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">C</div><div><strong>Clareia</strong><span>Preparação ENEM</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "plan") setSelectedSubject("all"); setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>Mapa ENEM</strong><span>{sidebarDone} etapas concluídas</span></div></div><div className="sidebar-rule"><span>Regra da plataforma</span><p>Abra, siga o próximo passo e avance. Nada de perder tempo procurando o que estudar.</p></div></aside>
-    <section className="workspace"><header className="topbar"><button className="menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><div className="academic-year-chip"><span>ENEM</span><small>{currentDate?.getFullYear() ?? ""}</small></div><button className="quick-add" onClick={() => setView("tasks")}>+ Planejar</button><button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button></div></header>
-      {notice && <button className="notice" onClick={() => setNotice("")}>{notice}<span>×</span></button>}
+    <aside id="main-sidebar" className={`sidebar ${mobileMenu ? "open" : ""}`}><div className="brand-row"><div className="brand-mark">C</div><div><strong>Clareia</strong><span>Preparação ENEM</span></div></div><nav aria-label="Navegação principal">{visibleViews.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => { if (item === "plan") setSelectedSubject("all"); setView(item); setMobileMenu(false); }}><span aria-hidden="true">{viewIcons[item]}</span>{viewLabels[item]}</button>)}</nav><div className="sidebar-progress"><div className="level-ring" style={{ "--value": `${sidebarPercent * 3.6}deg` } as React.CSSProperties}><span>{sidebarPercent}%</span></div><div><strong>Mapa ENEM</strong><span>{sidebarDone} etapas concluídas</span></div></div><div className="sidebar-rule"><span>Regra da plataforma</span><p>Abra, siga o próximo passo e avance. Nada de perder tempo procurando o que estudar.</p></div></aside>
+    {mobileMenu && <button type="button" className="sidebar-scrim" aria-label="Fechar menu" onClick={() => setMobileMenu(false)} />}
+    <section className="workspace"><header className="topbar"><button type="button" className="menu-button" aria-label={mobileMenu ? "Fechar menu" : "Abrir menu"} aria-controls="main-sidebar" aria-expanded={mobileMenu} onClick={() => setMobileMenu((value) => !value)}>☰</button><div><p>{formatDate(currentDate)}</p><h1>{viewLabels[view]}</h1></div><div className="top-actions"><div className="academic-year-chip"><span>ENEM</span><small>{currentDate?.getFullYear() ?? ""}</small></div><button className="quick-add" onClick={() => setView("tasks")}>+ Planejar</button><button className={`sync-account ${syncState}`} onClick={disconnectGoogle} title="Clique para sair da conta"><span>{syncState === "syncing" ? "↻" : syncState === "error" ? "!" : "✓"}</span><div><strong>{syncState === "syncing" ? "Salvando..." : syncState === "error" ? "Só neste aparelho" : "Sincronizado"}</strong><small>{user.displayName?.split(" ")[0] ?? user.email}</small></div></button></div></header>
+      {notice && <button type="button" className="notice" role="status" aria-live="polite" aria-label={`${notice} Fechar aviso`} onClick={() => setNotice("")}><span className="notice-message">{notice}</span><span aria-hidden="true">×</span></button>}
       {appSettings.announcementEnabled && appSettings.announcement.trim() && <div className="global-announcement"><strong>AVISO DO ADM</strong><span>{appSettings.announcement}</span></div>}
       {(siteBlocked || (appSettings.maintenanceMode && !isOwner(user?.email))) && <div className="maintenance-lock"><div><span>{siteBlocked ? "ACESSO PAUSADO" : "MANUTENÇÃO"}</span><h2>{siteBlocked ? "Seu acesso foi pausado pelo ADM." : "A plataforma está sendo atualizada."}</h2><p>{siteBlocked ? "Fale com o administrador para liberar novamente." : "Volte em alguns minutos. Seu progresso continua seguro."}</p></div></div>}
 

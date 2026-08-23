@@ -14,9 +14,9 @@ export default function StudentLobby({ loading, onGoogleLogin }: Props) {
         <div className="lobby-steps"><article className="active"><span>01</span><div><strong>Aprenda</strong><small>Cronograma em ordem</small></div></article><article><span>02</span><div><strong>Pratique</strong><small>Questões reais do ENEM</small></div></article><article><span>03</span><div><strong>Meça</strong><small>Provas e simulados</small></div></article></div>
         <div className="lobby-orbit" aria-hidden="true"><i /><i /><i /><span>LC</span><span>CN</span><span>MAT</span><b>E</b></div>
       </div>
-      <div className="lobby-card"><span className="eyebrow">ACESSO À PLATAFORMA</span><h2>Entre e continue de onde parou.</h2><p>Use sua conta Google. Sua senha continua protegida pelo Google e nunca é salva na plataforma.</p>
+      <div className="lobby-card"><span className="eyebrow">ACESSO À PLATAFORMA</span><h2>Entre e continue de onde parou.</h2><p>O Google protege sua conta. No primeiro acesso, você confirma nome, nome de exibição e RA + dígito.</p>
         {loading ? <div className="lobby-wait"><span /><strong>Preparando seu acesso…</strong><small>Estamos conferindo sua conta com segurança.</small></div> : <button className="lobby-google" onClick={() => void onGoogleLogin()}><span>G</span><div><strong>Continuar com Google</strong><small>Progresso sincronizado</small></div><b>→</b></button>}
-        <div className="lobby-security"><span>◆</span><p><strong>Sem cadastro escolar.</strong> Não pedimos RA, série nem e-mail institucional. Você entra e começa a preparação.</p></div>
+        <div className="lobby-security"><span>◆</span><p><strong>Identificação responsável.</strong> Pedimos somente Google, nome e RA + dígito. Sem série, data de nascimento ou e-mail institucional.</p></div>
         <div className="lobby-enem-numbers"><span><strong>747</strong> habilidades</span><span><strong>1.000</strong> questões</span><span><strong>47</strong> provas e simulados</span></div>
       </div>
     </section>

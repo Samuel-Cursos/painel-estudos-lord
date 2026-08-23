@@ -22,20 +22,17 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.registrationComplete == true
-        && request.resource.data.name is string
-        && request.resource.data.name.size() >= 3
-        && request.resource.data.institutionalEmail is string
-        && request.resource.data.institutionalEmail.size() >= 6
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 3
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.ra is string
+        && request.resource.data.ra.matches('^[0-9]{5,20}$')
         && request.resource.data.raKey is string
-        && request.resource.data.raKey.matches('^[0-9]{5,20}$')
-        && request.resource.data.ra == request.resource.data.raKey
+        && request.resource.data.raKey.matches('^[0-9]{5,20}-[0-9A-Z]{1,2}$')
+        && request.resource.data.raKey == request.resource.data.ra + '-' + request.resource.data.raDigit
         && request.resource.data.raDigit is string
         && request.resource.data.raDigit.matches('^[0-9A-Z]{1,2}$')
-        && request.resource.data.entrySchoolYear in ['5ef', '6ef', '7ef', '8ef', '9ef', '1em', '2em', '3em']
-        && request.resource.data.schoolYear == request.resource.data.entrySchoolYear
-        && request.resource.data.entryAcademicYear is int
-        && request.resource.data.entryAcademicYear >= 2020
-        && request.resource.data.entryAcademicYear <= 2100
         && getAfter(/databases/$(database)/documents/studentRaRegistry/$(request.resource.data.raKey)).data.uid == request.auth.uid;
     }
 
@@ -60,7 +57,9 @@ service cloud.firestore {
       allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
       allow list: if isOwner();
       allow create: if isOwner() || validStudentProfile(userId);
-      allow update: if isOwner() || (validStudentProfile(userId) && resource.data.get('registrationComplete', false) != true);
+      allow update: if isOwner() || (validStudentProfile(userId)
+        && (resource.data.get('registrationComplete', false) != true
+          || resource.data.raKey == request.resource.data.raKey));
       allow delete: if isOwner();
     }
 
@@ -74,7 +73,11 @@ service cloud.firestore {
         && raKey.matches('^[0-9]{5,20}$')
         && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.registrationComplete == true
         && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.raKey == raKey);
-      allow update, delete: if isOwner();
+      allow update: if isOwner() || (signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.raKey == raKey);
+      allow delete: if isOwner();
     }
 
     match /pdfAccess/{userId} {

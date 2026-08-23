@@ -1,47 +1,24 @@
-import { schoolYears, type SchoolYear } from "./school-data";
-
 export type StudentProfile = {
   uid: string;
   email: string;
-  name: string;
-  institutionalEmail: string;
+  fullName: string;
+  displayName: string;
   ra: string;
-  raKey: string;
   raDigit: string;
-  entrySchoolYear: SchoolYear;
-  schoolYear?: SchoolYear;
-  entryAcademicYear: number;
+  raKey: string;
   registrationComplete: true;
 };
 
-const yearOrder = schoolYears.map((item) => item.id);
-
 export function normalizeRa(value: string) {
-  return value.replace(/\D/g, "");
+  return value.replace(/\D/g, "").slice(0, 20);
 }
 
 export function normalizeRaDigit(value: string) {
   return value.replace(/[^0-9a-z]/gi, "").slice(0, 2).toUpperCase();
 }
 
-export function isInstitutionalEmail(value: string) {
-  const email = value.trim().toLocaleLowerCase("pt-BR");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
-  return !/(^|\.)(gmail|hotmail|outlook|yahoo|icloud)\./.test(email.split("@")[1] ?? "");
-}
-
-export function currentAcademicYear(date = new Date()) {
-  return date.getFullYear();
-}
-
-export function currentSchoolYear(profile: Pick<StudentProfile, "entrySchoolYear" | "entryAcademicYear">, date = new Date()): SchoolYear {
-  const initialIndex = Math.max(0, yearOrder.indexOf(profile.entrySchoolYear));
-  const elapsedYears = Math.max(0, currentAcademicYear(date) - profile.entryAcademicYear);
-  return yearOrder[Math.min(yearOrder.length - 1, initialIndex + elapsedYears)];
-}
-
-export function nextAcademicChange(date = new Date()) {
-  return new Date(date.getFullYear() + 1, 0, 1);
+export function makeRaKey(ra: string, digit: string) {
+  return `${normalizeRa(ra)}-${normalizeRaDigit(digit)}`;
 }
 
 export function isCompleteStudentProfile(value: unknown): value is StudentProfile {
@@ -50,10 +27,13 @@ export function isCompleteStudentProfile(value: unknown): value is StudentProfil
   return profile.registrationComplete === true
     && typeof profile.uid === "string"
     && typeof profile.email === "string"
-    && typeof profile.name === "string"
-    && typeof profile.institutionalEmail === "string"
-    && typeof profile.raKey === "string"
+    && typeof profile.fullName === "string"
+    && profile.fullName.trim().length >= 3
+    && typeof profile.displayName === "string"
+    && profile.displayName.trim().length >= 2
+    && typeof profile.ra === "string"
+    && /^\d{5,20}$/.test(profile.ra)
     && typeof profile.raDigit === "string"
-    && typeof profile.entryAcademicYear === "number"
-    && Boolean(profile.entrySchoolYear && yearOrder.includes(profile.entrySchoolYear));
+    && /^[0-9A-Z]{1,2}$/.test(profile.raDigit)
+    && profile.raKey === makeRaKey(profile.ra, profile.raDigit);
 }

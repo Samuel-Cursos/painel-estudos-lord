@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
   Question,
   QuestionSegment,
@@ -162,6 +163,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   const [pdfState, setPdfState] = useState<PdfState>(pdfAllowed && pdfEnabled ? "loading" : "ready");
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [pdfReloadKey, setPdfReloadKey] = useState(0);
+  const [pdfError, setPdfError] = useState("");
   const [noteDraft, setNoteDraft] = useState(initialQuestion ? progress[initialQuestion.id]?.note ?? "" : "");
   const showSame = isOwner(user?.email) || isHighSchool(schoolYear);
 
@@ -191,8 +193,9 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     const loadingTimer = window.setTimeout(() => setPdfState("loading"), 0);
     async function loadProtectedPdf() {
       try {
+        setPdfError("");
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
         const metadataSnapshot = await getDoc(doc(firestore, "protectedMaterials", PROTECTED_PDF_META_DOC));
         if (!metadataSnapshot.exists()) throw new Error("PDF ainda não enviado");
         const metadata = metadataSnapshot.data();
@@ -201,17 +204,17 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
         const version = String(metadata.version);
         if (!Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > 64 || totalSize < 1 || totalSize > 25 * 1024 * 1024) throw new Error("Metadados inválidos");
 
-        const chunkSnapshots = await Promise.all(Array.from({ length: chunkCount }, (_, index) => getDoc(doc(firestore, PROTECTED_PDF_CHUNKS, `${version}-${String(index).padStart(3, "0")}`))));
         const bytes = new Uint8Array(totalSize);
         let offset = 0;
-        chunkSnapshots.forEach((snapshot) => {
+        for (let index = 0; index < chunkCount; index += 1) {
+          const snapshot = await getDoc(doc(firestore, PROTECTED_PDF_CHUNKS, `${version}-${String(index).padStart(3, "0")}`));
           if (!snapshot.exists()) throw new Error("Parte do PDF ausente");
           const storedBytes = snapshot.data().bytes as { toUint8Array?: () => Uint8Array } | undefined;
           if (!storedBytes?.toUint8Array) throw new Error("Parte do PDF inválida");
           const chunk = storedBytes.toUint8Array();
           bytes.set(chunk, offset);
           offset += chunk.length;
-        });
+        }
         if (offset !== totalSize) throw new Error("PDF incompleto");
         document = await pdfjs.getDocument({ data: bytes }).promise;
         if (!active) {
@@ -220,11 +223,15 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
         }
         setPdfDocument(document);
         setPdfState("ready");
-      } catch {
+      } catch (reason) {
         if (!active) return;
+        console.error("Clareia: falha ao abrir o PDF protegido", reason);
         setPdfDocument(null);
         setPdfState("error");
-        onNotice("Não consegui abrir o caderno agora. Tente novamente em alguns segundos.");
+        const code = typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "";
+        const message = reason instanceof Error ? reason.message : "Falha desconhecida";
+        setPdfError(code.includes("permission-denied") ? "O Firebase bloqueou a leitura. Publique as regras novas ou libere esta conta no ADM." : message.includes("ainda não enviado") ? "A apostila ainda não foi enviada. Entre no ADM, abra Conteúdo e envie o PDF." : message.includes("ausente") || message.includes("incompleto") ? "O envio da apostila está incompleto. Envie o PDF novamente pelo ADM." : "O leitor não conseguiu montar o arquivo. Tente novamente.");
+        onNotice(code.includes("permission-denied") ? "O Firebase ainda não liberou esta conta para a apostila." : "A apostila não carregou. Veja o diagnóstico exibido no caderno.");
       }
     }
     void loadProtectedPdf();
@@ -286,7 +293,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
 
     {pdfState === "error" && <section className="pdf-setup error">
       <div className="pdf-setup-icon">PDF</div>
-      <div><span className="eyebrow">CADERNO INCLUÍDO</span><h3>Não consegui carregar o arquivo</h3><p>O PDF já faz parte do site. Verifique sua conexão e tente abrir novamente.</p></div>
+      <div><span className="eyebrow">CADERNO INCLUÍDO</span><h3>Não consegui carregar o arquivo</h3><p>{pdfError || "Verifique sua conexão e tente abrir novamente."}</p></div>
       <button className="primary" onClick={() => setPdfReloadKey((key) => key + 1)}>Tentar novamente</button>
     </section>}
 

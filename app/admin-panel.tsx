@@ -12,7 +12,7 @@ type UserMetrics = { lessons: number; stages: number; questions: number; openTas
 type AdminTab = "overview" | "users" | "content" | "settings";
 type AuditEntry = { id: string; action: string; detail: string; createdAt?: { toDate?: () => Date } };
 type QuestionDraft = { subject: string; prompt: string; options: string; correct: number; explanation: string; written: boolean };
-type StoredStudentProfile = { uid: string; email: string; name?: string };
+type StoredStudentProfile = { uid: string; email: string; fullName?: string; displayName?: string; ra?: string; raDigit?: string };
 
 type Props = { user: User; onNotice: (message: string) => void };
 const emptyDraft: QuestionDraft = { subject: "portuguese", prompt: "", options: "\n\n\n", correct: 0, explanation: "", written: false };
@@ -82,7 +82,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
 
   useEffect(() => { const timer = window.setTimeout(() => void loadAdmin(), 0); return () => window.clearTimeout(timer); }, [loadAdmin]);
 
-  const filteredUsers = useMemo(() => { const query = search.trim().toLocaleLowerCase("pt-BR"); return users.filter((item) => { const profile = studentProfiles[item.uid]; return !query || `${item.email} ${item.displayName ?? ""} ${profile?.name ?? ""}`.toLocaleLowerCase("pt-BR").includes(query); }); }, [search, studentProfiles, users]);
+  const filteredUsers = useMemo(() => { const query = search.trim().toLocaleLowerCase("pt-BR"); return users.filter((item) => { const profile = studentProfiles[item.uid]; return !query || `${item.email} ${item.displayName ?? ""} ${profile?.fullName ?? ""} ${profile?.ra ?? ""}`.toLocaleLowerCase("pt-BR").includes(query); }); }, [search, studentProfiles, users]);
   const totals = useMemo(() => Object.values(metrics).reduce((result, item) => ({ lessons: result.lessons + item.lessons, stages: result.stages + item.stages, questions: result.questions + item.questions, tasks: result.tasks + item.openTasks }), { lessons: 0, stages: 0, questions: 0, tasks: 0 }), [metrics]);
 
   async function toggleAccess(person: DirectoryUser) {
@@ -164,8 +164,8 @@ export default function AdminPanel({ user, onNotice }: Props) {
         const profile = studentProfiles[person.uid];
         return <article key={person.uid}>
           <div className="admin-avatar">{(person.displayName || person.email).slice(0, 1).toUpperCase()}</div>
-          <div><strong>{profile?.name || person.displayName || "Usuário"}</strong><small>{person.email}</small><em>Visto: {timestampLabel(person.lastSeenAt)}</em></div>
-          <div className="student-admin-data"><span>PERFIL ENEM</span><strong>Acesso pelo Google</strong><small>Sem RA, série ou cadastro escolar obrigatório</small></div>
+          <div><strong>{profile?.displayName || profile?.fullName || person.displayName || "Usuário"}</strong><small>{person.email}</small><em>Visto: {timestampLabel(person.lastSeenAt)}</em></div>
+          <div className="student-admin-data"><span>IDENTIFICAÇÃO</span><strong>{profile?.ra ? `RA ${profile.ra}-${profile.raDigit}` : "Cadastro pendente"}</strong><small>{profile?.fullName || "Aguardando nome e RA"}</small></div>
           <div className="student-current-year"><small>PREPARAÇÃO</small><strong>ENEM + Inglês</strong></div>
           <div className="user-mini-metrics"><span><b>{data.lessons + data.stages}</b> etapas</span><span><b>{data.questions}</b> questões</span><span><b>{data.openTasks}</b> tarefas</span></div>
           <span className={isBlocked ? "access-blocked" : enabled ? "access-on" : "access-off"}>{owner ? "Dono · tudo liberado" : isBlocked ? "Painel bloqueado" : enabled ? "PDF liberado" : "Versão em texto"}</span>

@@ -130,7 +130,8 @@ export default function StudyDashboard() {
         getDoc(doc(firestore, "pdfAccess", currentUser.uid)), getDoc(doc(firestore, "userControls", currentUser.uid)),
         getDoc(doc(firestore, "appSettings", "main")), getDoc(doc(firestore, "users", currentUser.uid, "dashboard", "main")), getDoc(doc(firestore, "studentProfiles", currentUser.uid)),
       ]);
-      if (profileSnapshot.exists() && isCompleteStudentProfile(profileSnapshot.data())) setStudentProfile(profileSnapshot.data());
+      const storedProfile = profileSnapshot.exists() ? profileSnapshot.data() : null;
+      if (isCompleteStudentProfile(storedProfile)) setStudentProfile(storedProfile);
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
       setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);

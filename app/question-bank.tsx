@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
   Question,
   QuestionSegment,
@@ -195,7 +194,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
       try {
         setPdfError("");
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
         const metadataSnapshot = await getDoc(doc(firestore, "protectedMaterials", PROTECTED_PDF_META_DOC));
         if (!metadataSnapshot.exists()) throw new Error("PDF ainda não enviado");
         const metadata = metadataSnapshot.data();

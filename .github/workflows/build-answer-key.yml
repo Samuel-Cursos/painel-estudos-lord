@@ -1,0 +1,34 @@
+name: Build complete answer key
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-answer-key.yml'
+      - 'scripts/build-complete-answer-key.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  build-key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Check official PPL source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --retry 3 --connect-timeout 20 --max-time 120 \
+            -A 'Mozilla/5.0 Clareia answer-key generator' \
+            -o /tmp/ppl.pdf \
+            'https://download.inep.gov.br/enem/provas_e_gabaritos/2020_GB_reaplicacao_PPL_D2_CD7.pdf'
+          file /tmp/ppl.pdf
+          stat -c '%s bytes' /tmp/ppl.pdf

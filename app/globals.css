@@ -123,3 +123,7 @@ button,input,select { font:inherit; } button { color:inherit; }
 /* Mantém a biblioteca de provas dentro da largura real do celular. */
 .exam-library{width:100%;max-width:100%;min-width:0}.exam-library>*,.exam-library-hero>div,.exam-year-browser,.exam-year-group,.exam-year-group>div,.selected-exam-head>div{min-width:0}.exam-library p{overflow-wrap:anywhere}.exam-library-hero{width:100%;max-width:100%}.exam-library-hero aside{min-width:0;grid-template-columns:auto minmax(0,1fr)}
 @media(max-width:760px){.exam-library-hero{grid-template-columns:minmax(0,1fr)}.exam-library-hero aside{width:100%;grid-template-columns:auto minmax(0,1fr)}.exam-year-browser>.section-heading{align-items:flex-start;flex-direction:column}.official-source-link{align-self:flex-start}.exam-year-group{width:100%;grid-template-columns:minmax(0,1fr)}.exam-year-group>div:last-child{width:100%;min-width:0;grid-template-columns:repeat(2,minmax(0,1fr))}.exam-year-group button{width:100%;min-width:0}}
+
+/* A tabela larga dos simulados rola por dentro sem alargar o Plano ENEM. */
+.enem-page{width:100%;min-width:0;grid-template-columns:minmax(0,1fr);overflow-x:clip}.enem-page>*,.enem-page>.section-block{width:100%;min-width:0;max-width:100%}.enem-page>.assessment-back{width:auto;justify-self:start}.assessment-table{width:100%;min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+@media(max-width:480px){.exam-year-group>div:last-child{grid-template-columns:minmax(0,1fr)}}

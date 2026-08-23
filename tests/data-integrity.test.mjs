@@ -103,6 +103,9 @@ test("o Modo Prova é interno, contínuo, retomável e responsivo", async () => 
   assert.match(bank, /bankMode === "main"/);
   assert.match(styles, /\.exam-library\{width:100%;max-width:100%;min-width:0/);
   assert.match(styles, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.enem-page\{width:100%;min-width:0;grid-template-columns:minmax\(0,1fr\);overflow-x:clip\}/);
+  assert.match(styles, /\.assessment-table\{width:100%;min-width:0;max-width:100%;overflow-x:auto/);
+  assert.match(styles, /@media\(max-width:480px\)\{\.exam-year-group>div:last-child\{grid-template-columns:minmax\(0,1fr\)\}\}/);
 });
 
 test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async () => {

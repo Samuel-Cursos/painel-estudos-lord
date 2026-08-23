@@ -19,6 +19,7 @@ service cloud.firestore {
     function validStudentProfile(userId) {
       return signedIn()
         && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'fullName', 'displayName', 'ra', 'raDigit', 'raKey', 'registrationComplete', 'createdAt', 'updatedAt'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.registrationComplete == true
@@ -36,9 +37,21 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/studentRaRegistry/$(request.resource.data.raKey)).data.uid == request.auth.uid;
     }
 
+    function validDashboard(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['progress', 'skillProgress', 'assessmentResults', 'questionProgress', 'tasks', 'essays', 'updatedAt'])
+        && request.resource.data.get('progress', {}) is map
+        && request.resource.data.get('skillProgress', {}) is map
+        && request.resource.data.get('assessmentResults', {}) is map
+        && request.resource.data.get('questionProgress', {}) is map
+        && request.resource.data.get('tasks', []) is list
+        && request.resource.data.get('essays', []) is list;
+    }
+
     match /users/{userId}/dashboard/{documentId} {
       allow read: if isOwner() || (signedIn() && request.auth.uid == userId);
-      allow create, update: if signedIn() && request.auth.uid == userId;
+      allow create, update: if documentId == 'main' && validDashboard(userId);
       allow delete: if isOwner() || (signedIn() && request.auth.uid == userId);
     }
 
@@ -68,15 +81,13 @@ service cloud.firestore {
       allow list: if isOwner();
       allow create: if isOwner() || (signedIn()
         && !exists(/databases/$(database)/documents/studentRaRegistry/$(raKey))
+        && request.resource.data.keys().hasOnly(['uid', 'raKey', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.raKey == raKey
-        && raKey.matches('^[0-9]{5,20}$')
+        && raKey.matches('^[0-9]{5,20}-[0-9A-Z]{1,2}$')
         && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.registrationComplete == true
         && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.raKey == raKey);
-      allow update: if isOwner() || (signedIn()
-        && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.raKey == raKey);
+      allow update: if isOwner();
       allow delete: if isOwner();
     }
 

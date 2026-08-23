@@ -1,89 +1,72 @@
-# Atualizar o Painel de Estudos do Lord
+# Atualizar a Clareia
 
-Este pacote contém o site completo para estudantes do 5º ano do Fundamental à 3ª série do Ensino Médio. São 600 aulas autorais e 6.000 atividades organizadas por série e matéria, lobby com Google, RA único, cadastro escolar protegido, avanço automático de série, 55 questões rápidas corrigidas, o caderno SAME com 1.000 questões para o Ensino Médio, checks de aprendizado e a Central ADM.
+## 1. Testar no VS Code
 
-## 1. Abrir e testar no VS Code
-
-Abra a pasta deste projeto no VS Code. No terminal PowerShell, execute:
+Abra a pasta do projeto e execute no PowerShell:
 
 ```powershell
 npm.cmd install
+npm.cmd run lint
+npm.cmd test
+$env:VERCEL="1"; npm.cmd run build
+```
+
+Para abrir localmente:
+
+```powershell
 npm.cmd run dev
 ```
 
-Abra o endereço mostrado no terminal (normalmente `http://localhost:3000`).
+## 2. Publicar as regras do Firebase
 
-## 2. Publicar as regras gratuitas do Firebase
-
-No mesmo terminal:
+Esta etapa é obrigatória quando `firestore.rules` muda. As regras protegem perfis, RA, progresso, permissões do PDF, configurações e ADM.
 
 ```powershell
-npm.cmd install -g firebase-tools
-firebase.cmd login
-firebase.cmd use painel-estudos-491a7
-firebase.cmd deploy --project painel-estudos-491a7 --only firestore:rules
+npx.cmd firebase-tools login
+npx.cmd firebase-tools deploy --only firestore:rules --project painel-estudos-491a7
 ```
 
-Não ative o Firebase Storage e não faça upgrade para o plano Blaze. O projeto usa somente o Firestore do plano gratuito.
-
-As novas regras são obrigatórias para reservar cada RA sem duplicidade, proteger nome/RA/e-mail institucional, travar a série escolhida pelo aluno, permitir correções apenas pelo ADM, ler o progresso, publicar questões e registrar o histórico administrativo.
+O cadastro usa o formato `RA-DÍGITO`. Se as regras antigas estiverem publicadas, um aluno novo pode entrar com Google e ficar travado na criação do perfil.
 
 ## 3. Conferir o PDF protegido
 
-1. Entre no site com `samuelreisalves765@gmail.com`.
-2. Abra **ADM** no menu.
-3. Abra **ADM → Conteúdo**.
-4. Se o cartão disser **PDF protegido pronto**, não envie novamente.
-5. Se estiver vazio, clique em **Enviar ou substituir PDF** e escolha seu PDF compacto de até 25 MB.
+1. Entre em `https://painel-estudos-lord.vercel.app` com a conta proprietária.
+2. Abra **ADM → Conteúdo**.
+3. Confira se o cartão mostra o nome do arquivo, tamanho e quantidade de partes.
+4. Só substitua se necessário. O arquivo precisa ser um PDF válido de até 25 MB.
 
-A pasta `private-materials` está no `.gitignore`: o PDF não será enviado ao GitHub ou à Vercel. O painel ADM divide o arquivo em partes menores e as guarda com proteção no Firestore.
+O PDF não deve ser colocado em `public/`, no GitHub ou na Vercel. A Clareia o guarda em partes protegidas no Firestore. Um envio interrompido limpa automaticamente as partes incompletas.
 
-## 4. Mandar esta atualização ao GitHub
+## 4. Publicar no GitHub
 
-O usuário e o e-mail já estão preenchidos abaixo. Execute dentro da pasta do projeto:
+Dentro da pasta do projeto:
 
 ```powershell
-git init
-git config user.name "Samuel-Cursos"
-git config user.email "samuelreisalves765@gmail.com"
-git branch -M main
-if (git remote | Select-String -Quiet '^origin$') { git remote set-url origin https://github.com/Samuel-Cursos/painel-estudos-lord.git } else { git remote add origin https://github.com/Samuel-Cursos/painel-estudos-lord.git }
 git add .
-git commit -m "Cria aulas completas e separa area ENEM"
-git push -u origin main
+git commit -m "Aprofunda Clareia e corrige fluxos criticos"
+git push origin main
 ```
 
-Se aparecer `nothing to commit`, os arquivos já foram adicionados. Execute apenas `git push -u origin main`.
+Se aparecer `nothing to commit`, execute apenas o `git push`. A Vercel inicia o deploy automaticamente porque o projeto está conectado ao repositório `Samuel-Cursos/painel-estudos-lord`.
 
-## 5. Vercel
+## 5. Verificar a produção
 
-Se a Vercel já está conectada ao repositório `Samuel-Cursos/painel-estudos-lord`, o push inicia a publicação automaticamente. Abra o painel da Vercel, entre no projeto e aguarde o deploy ficar **Ready**. O endereço continua `https://painel-estudos-lord.vercel.app`.
+Espere o deploy ficar **Ready** e confira:
 
-## Como funciona o acesso
+- entrada com Google e cadastro de um perfil novo;
+- Início, Plano ENEM, Questões, Redação, Inglês e Agenda;
+- carregamento textual das 1.000 questões;
+- PDF em uma conta liberada pelo ADM;
+- Central ADM, configurações e histórico;
+- celular e computador;
+- ausência de erros da aplicação no console.
 
-- O site só abre depois do login Google e do cadastro com nome, RA, dígito, e-mail institucional e série.
-- O RA é único: não pode ser usado por duas contas Google.
-- A série é escolhida uma vez e avança automaticamente a cada novo ano letivo, parando na 3ª série.
-- A senha nunca passa pelo site, Firestore ou ADM: ela fica protegida no Google.
-- Cada série recebe somente suas matérias, com 10 aulas guiadas por matéria.
-- Cada aula reúne aquecimento, explicação em capítulos, lousa visual, exemplo resolvido passo a passo, resumo para anotar, fontes, videoaula de apoio e teste imediato.
-- “Não entendi” abre uma segunda aula explicada por outro caminho. “Entendi” abre a questão dentro da própria aula, e só o acerto libera a próxima.
-- Trilhas contém apenas as aulas escolares da série. Toda a preparação avançada, matérias, provas, simulados e o caderno de 1.000 questões ficam na aba ENEM.
-- O progresso das aulas e das respostas sincroniza entre celular e computador pela conta Google.
-- Alunos do Ensino Médio veem o caderno SAME em texto; dono e pessoas liberadas também veem o PDF original reconstruído das partes protegidas do Firestore.
-- Só `samuelreisalves765@gmail.com` enxerga a Central ADM e tem acesso permanente a tudo.
-- Para liberar alguém, essa pessoa precisa entrar com Google uma vez; depois aparece na lista do ADM.
+Endereço oficial: `https://painel-estudos-lord.vercel.app`
 
-## O que a nova Central ADM controla
+## Escopo atual, sem ambiguidade
 
-- Visão geral de usuários, etapas concluídas, questões respondidas e tarefas abertas.
-- Progresso individual, última atividade, nome, RA, dígito, e-mail institucional, série/ano de entrada, permissão do PDF, bloqueio do painel e zeragem real em todos os aparelhos.
-- Correção de cadastro pelo ADM e liberação do RA quando o aluno precisa trocar de conta Google.
-- Criação e exclusão de questões de múltipla escolha ou resposta escrita.
-- Upload e substituição do PDF protegido.
-- Check de conclusão, banco público, PDF, modo manutenção, aviso geral e meta diária.
-- Histórico das últimas ações administrativas.
-
-## Material futuro de terceiros
-
-Não coloque uma apostila privada em `public/` nem transforme seu conteúdo em texto público. Use outro caminho protegido no Firebase e conceda acesso apenas ao seu UID.
+- A Clareia não pede série, data de nascimento ou e-mail institucional.
+- O Google autentica; nome e RA + dígito identificam o perfil do estudante.
+- O caderno de 1.000 questões cobre Matemática, Biologia, Química e Física.
+- As 24 aulas de Inglês e seus checks funcionam dentro do próprio site; o apoio do ChatGPT é opcional.
+- Só a conta proprietária acessa o ADM e tem acesso permanente ao PDF.

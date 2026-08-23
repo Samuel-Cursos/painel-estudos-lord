@@ -1,8 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const isVercel = process.env.VERCEL === "1";
+
+if (!isVercel) rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
 
 const command = isVercel ? process.execPath : "bash";
 const args = isVercel

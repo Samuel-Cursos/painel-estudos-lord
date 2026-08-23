@@ -20,6 +20,6 @@ export default function StudentLobby({ loading, onGoogleLogin }: Props) {
         <div className="lobby-enem-numbers"><span><strong>747</strong> habilidades</span><span><strong>1.000</strong> questões</span><span><strong>47</strong> provas e simulados</span></div>
       </div>
     </section>
-    <footer className="lobby-footer"><span>Clareia · preparação focada no ENEM</span><span>Inglês em expansão · progresso separado por usuário</span></footer>
+    <footer className="lobby-footer"><span>Clareia · preparação focada no ENEM</span><span>24 aulas de Inglês · progresso separado por usuário</span></footer>
   </main>;
 }

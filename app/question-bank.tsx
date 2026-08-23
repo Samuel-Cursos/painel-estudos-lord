@@ -11,7 +11,6 @@ import {
   questionChapters,
   questions,
 } from "./question-bank-data";
-import { questionText } from "./question-text-data";
 import { firestore } from "./firebase-client";
 import { isOwner, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
 import PracticeLibrary from "./practice-library";
@@ -91,6 +90,15 @@ function normalize(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
 }
 
+function isQuestionAnswered(attempt?: QuestionAttempt) {
+  return Boolean(attempt?.answer || attempt?.note?.trim());
+}
+
+function localDateKey(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
 function chapterForTopic(subject: QuestionSubject, topic: string) {
   const normalized = normalize(topic);
   const match = topicAliases[subject].find(([aliases]) => aliases.some((alias) => normalized.includes(normalize(alias))));
@@ -141,15 +149,24 @@ function QuestionDocument({ pdf, question }: { pdf: PDFDocumentProxy; question: 
   return <div className="question-document">{question.segments.map((segment, index) => <QuestionCanvas key={`${question.id}-${segment.page}-${segment.x}-${index}`} pdf={pdf} segment={segment} />)}</div>;
 }
 
+let questionTextPromise: Promise<typeof import("./question-text-data")> | null = null;
+
 function TextQuestion({ question }: { question: Question }) {
-  const content = questionText[question.id];
+  const [content, setContent] = useState<{ text: string; needsVisual: boolean } | null>(null);
+  useEffect(() => {
+    let active = true;
+    questionTextPromise ??= import("./question-text-data");
+    void questionTextPromise.then((module) => { if (active) setContent(module.questionText[question.id] ?? null); });
+    return () => { active = false; };
+  }, [question.id]);
+  if (!content) return <div className="question-pdf-placeholder"><span>TXT</span><strong>Preparando o enunciado</strong><p>A versão em texto está sendo carregada.</p></div>;
   return <div className="text-question-document">{content?.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content?.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
 }
 
 export default function QuestionBank({ schoolYear, progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
   const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : questionChapters[0];
   const initialQuestion = focus
-    ? questions.find((question) => question.chapterId === initialChapter.id && !progress[question.id]?.answer)
+    ? questions.find((question) => question.chapterId === initialChapter.id && !isQuestionAnswered(progress[question.id]))
       ?? questions.find((question) => question.chapterId === initialChapter.id)
       ?? null
     : null;
@@ -167,8 +184,8 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   const showSame = isOwner(user?.email) || isHighSchool(schoolYear);
 
   const chapters = useMemo(() => questionChapters.filter((chapter) => chapter.subject === subject), [subject]);
-  const answeredCount = Object.values(progress).filter((attempt) => Boolean(attempt.answer || attempt.note?.trim())).length;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const answeredCount = questions.filter((question) => isQuestionAnswered(progress[question.id])).length;
+  const todayKey = localDateKey();
   const answeredToday = Object.values(progress).filter((attempt) => attempt.answeredAt?.slice(0, 10) === todayKey).length;
 
   const filtered = useMemo(() => {
@@ -176,8 +193,8 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     return questions.filter((question) => {
       if (question.subject !== subject || question.chapterId !== chapterId) return false;
       const attempt = progress[question.id];
-      if (status === "answered" && !attempt?.answer && !attempt?.note?.trim()) return false;
-      if (status === "pending" && (attempt?.answer || attempt?.note?.trim())) return false;
+      if (status === "answered" && !isQuestionAnswered(attempt)) return false;
+      if (status === "pending" && isQuestionAnswered(attempt)) return false;
       if (status === "review" && !attempt?.review) return false;
       return !query || normalize(`${question.number} ${question.source} ${question.chapter}`).includes(query);
     });
@@ -261,8 +278,8 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     if (!activeQuestion) return;
     const sameChapter = questions.filter((question) => question.chapterId === activeQuestion.chapterId);
     const currentIndex = sameChapter.findIndex((question) => question.id === activeQuestion.id);
-    const next = sameChapter.slice(currentIndex + 1).find((question) => !progress[question.id]?.answer)
-      ?? sameChapter.find((question) => !progress[question.id]?.answer)
+    const next = sameChapter.slice(currentIndex + 1).find((question) => !isQuestionAnswered(progress[question.id]))
+      ?? sameChapter.find((question) => !isQuestionAnswered(progress[question.id]))
       ?? sameChapter[(currentIndex + 1) % sameChapter.length];
     openQuestion(next);
   }
@@ -276,7 +293,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
       <div>
         <span className="eyebrow">CADERNO SAME · 1.000 QUESTÕES</span>
         <h2>Pratique sem procurar.</h2>
-        <p>Escolha o assunto ou abra a recomendação da sua aula. Sua resposta, anotação e fila de revisão ficam salvas.</p>
+        <p>400 questões de Matemática e 600 de Biologia, Química e Física. Respostas, anotações e revisão ficam salvas.</p>
       </div>
       <div className="question-stats">
         <article><strong>{answeredCount}</strong><span>respondidas</span></article>
@@ -287,7 +304,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
 
     <PracticeLibrary progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} enabled={publicPracticeEnabled} />
 
-    {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 1.000 questões funcionam sem login. O PDF original aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
+    {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 1.000 questões ficam disponíveis na sua conta. O PDF original aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
     {pdfAllowed && !pdfEnabled && <section className="access-mode-banner"><span>OFF</span><div><strong>PDF pausado pelo ADM</strong><p>As questões continuam disponíveis em texto.</p></div></section>}
 
     {pdfState === "error" && <section className="pdf-setup error">
@@ -305,7 +322,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
       </aside>
 
       <main className="question-list-panel">
-        <div className="question-list-head"><div><span className="eyebrow">CAPÍTULO {currentChapter.number}</span><h3>{currentChapter.title}</h3><p>Questões {currentChapter.start}–{currentChapter.end} · {subjectMeta[subject].name}</p></div><button className="primary" onClick={() => openQuestion(filtered.find((question) => !progress[question.id]?.answer) ?? filtered[0] ?? null)}>Começar próxima →</button></div>
+        <div className="question-list-head"><div><span className="eyebrow">CAPÍTULO {currentChapter.number}</span><h3>{currentChapter.title}</h3><p>Questões {currentChapter.start}–{currentChapter.end} · {subjectMeta[subject].name}</p></div><button className="primary" onClick={() => openQuestion(filtered.find((question) => !isQuestionAnswered(progress[question.id])) ?? filtered[0] ?? null)}>Começar próxima →</button></div>
         <div className="question-toolbar"><input value={search} onChange={(event) => { setSearch(event.target.value); setVisibleCount(80); }} placeholder="Buscar número, ano ou capítulo" /><div>{(["all", "pending", "answered", "review"] as StatusFilter[]).map((item) => <button key={item} className={status === item ? "active" : ""} onClick={() => { setStatus(item); setVisibleCount(80); }}>{item === "all" ? "Todas" : item === "pending" ? "Não feitas" : item === "answered" ? "Respondidas" : "Revisar"}</button>)}</div></div>
         <div className="question-grid">{filtered.slice(0, visibleCount).map((question) => { const attempt = progress[question.id]; return <button key={question.id} className={`question-card ${attempt?.answer || attempt?.note?.trim() ? "answered" : ""} ${attempt?.review ? "review" : ""}`} onClick={() => openQuestion(question)}><span className="question-number">{attempt?.answer ? attempt.answer : question.number}</span><div><small>QUESTÃO {question.number} · {question.source || "ENEM"}</small><strong>{question.chapter}</strong><em>{attempt?.answer ? `Alternativa ${attempt.answer} marcada` : attempt?.note?.trim() ? "Resposta escrita salva" : "Ainda não respondida"}</em></div><b>{attempt?.review ? "★" : "→"}</b></button>; })}</div>
         {!filtered.length && <div className="question-empty"><span>○</span><strong>Nenhuma questão neste filtro.</strong><p>Troque o status ou limpe a busca.</p></div>}
@@ -319,9 +336,9 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
 
       <div className="question-solve-layout">
         <div className="question-paper">
-          {pdfAllowed && pdfEnabled ? (pdfDocument ? <QuestionDocument pdf={pdfDocument} question={activeQuestion} /> : <div className="question-pdf-placeholder"><span>{pdfState === "loading" ? "…" : "PDF"}</span><strong>{pdfState === "loading" ? "Abrindo seu PDF protegido" : "Não consegui abrir o caderno"}</strong><p>{pdfState === "loading" ? "O Firebase está verificando sua permissão." : "Confirme no ADM se o arquivo já foi enviado e sua conta está liberada."}</p></div>) : <TextQuestion question={activeQuestion} />}
+          {pdfAllowed && pdfEnabled ? (pdfDocument ? <QuestionDocument pdf={pdfDocument} question={activeQuestion} /> : <div className="question-pdf-placeholder"><span>{pdfState === "loading" ? "…" : "PDF"}</span><strong>{pdfState === "loading" ? "Abrindo seu PDF protegido" : "Não consegui abrir o caderno"}</strong><p>{pdfState === "loading" ? "O Firebase está verificando sua permissão." : "Confirme no ADM se o arquivo já foi enviado e sua conta está liberada."}</p></div>) : <TextQuestion key={activeQuestion.id} question={activeQuestion} />}
         </div>
-        <aside className="answer-panel"><span className="eyebrow">SUA RESPOSTA</span><h3>Marque uma alternativa</h3><p>O material não inclui gabarito. Sua escolha será salva para você conferir depois.</p><div className="answer-options">{["A", "B", "C", "D", "E"].map((choice) => <button key={choice} className={activeAttempt.answer === choice ? "selected" : ""} onClick={() => chooseAnswer(choice)}><span>{choice}</span>{activeAttempt.answer === choice ? "Alternativa marcada" : `Escolher ${choice}`}</button>)}</div><label className="reasoning-box"><span>Raciocínio ou resposta escrita</span><textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} onBlur={() => updateAttempt(activeQuestion, { note: noteDraft, answeredAt: noteDraft.trim() ? activeAttempt.answeredAt ?? new Date().toISOString() : activeAttempt.answeredAt })} placeholder="Escreva sua conta, justificativa ou resposta aqui…" /></label><small className="auto-save-note">A alternativa salva no clique. O texto salva ao sair da caixa.</small></aside>
+        <aside className="answer-panel"><span className="eyebrow">SUA RESPOSTA</span><h3>Marque uma alternativa</h3><p>O material não inclui gabarito. Sua escolha será salva para você conferir depois.</p><div className="answer-options">{["A", "B", "C", "D", "E"].map((choice) => <button key={choice} className={activeAttempt.answer === choice ? "selected" : ""} onClick={() => chooseAnswer(choice)}><span>{choice}</span>{activeAttempt.answer === choice ? "Alternativa marcada" : `Escolher ${choice}`}</button>)}</div><label className="reasoning-box"><span>Raciocínio ou resposta escrita</span><textarea maxLength={1500} value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} onBlur={() => updateAttempt(activeQuestion, { note: noteDraft, answeredAt: noteDraft.trim() ? activeAttempt.answeredAt ?? new Date().toISOString() : activeAttempt.answeredAt })} placeholder="Escreva sua conta, justificativa ou resposta aqui…" /></label><small className="auto-save-note">A alternativa salva no clique. O texto salva ao sair da caixa.</small></aside>
       </div>
       <footer className="question-modal-actions"><button className="secondary" onClick={() => setActiveQuestion(null)}>Voltar ao caderno</button><div><span>{activeAttempt.answer || activeAttempt.note?.trim() ? "Resposta registrada" : "Ainda não respondida"}</span><button className="primary" onClick={nextQuestion}>Próxima do assunto →</button></div></footer>
     </section></div>}

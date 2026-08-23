@@ -1,0 +1,67 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
+
+function extractJson(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Marcador ausente: ${startMarker}`);
+  const contentStart = start + startMarker.length;
+  const end = source.indexOf(endMarker, contentStart);
+  assert.notEqual(end, -1, `Marcador final ausente: ${endMarker}`);
+  return JSON.parse(source.slice(contentStart, end));
+}
+
+test("o mapa ENEM preserva os números publicados", async () => {
+  const source = await read("app/enem-data.ts");
+  const data = extractJson(source, "export const enemData = ", " as const;");
+  assert.equal(data.skills.length, 747);
+  assert.equal(data.exams.length, 35);
+  assert.equal(data.simulations.length, 12);
+  assert.equal(data.exams.length + data.simulations.length, 47);
+  assert.equal(data.skills.filter((skill) => !skill.subject || !skill.level || !skill.topic || !skill.skill || !skill.relevance).length, 0);
+});
+
+test("as 1.000 questões têm matéria, trecho válido e versão textual", async () => {
+  const [bankSource, textSource] = await Promise.all([read("app/question-bank-data.ts"), read("app/question-text-data.ts")]);
+  const questionsMatch = bankSource.match(/export const questions: Question\[\] = (\[.*\]);\s*$/s);
+  const textMatch = textSource.match(/export const questionText: Record<string, QuestionText> = (\{.*\});\s*$/s);
+  assert.ok(questionsMatch);
+  assert.ok(textMatch);
+  const questions = JSON.parse(questionsMatch[1]);
+  const questionText = JSON.parse(textMatch[1]);
+  const counts = Object.groupBy(questions, (question) => question.subject);
+
+  assert.equal(questions.length, 1000);
+  assert.deepEqual(Object.fromEntries(Object.entries(counts).map(([subject, items]) => [subject, items.length])), { math: 400, biology: 200, chemistry: 200, physics: 200 });
+  assert.equal(Object.keys(questionText).length, 1000);
+  for (const question of questions) {
+    assert.ok(questionText[question.id]?.text.trim(), `Texto ausente em ${question.id}`);
+    assert.ok(question.segments.length > 0, `Trecho ausente em ${question.id}`);
+    assert.ok(question.segments.every((segment) => segment.page > 0 && segment.width > 0 && segment.height > 0), `Trecho inválido em ${question.id}`);
+  }
+});
+
+test("as 24 aulas de Inglês têm conteúdo interno e check de domínio", async () => {
+  const [course, content, mastery] = await Promise.all([read("app/course-data.ts"), read("app/english-lesson-content.ts"), read("app/mastery-data.ts")]);
+  const englishBlock = course.slice(course.indexOf("const englishTopics"), course.indexOf("const mathTopics"));
+  const lessonCount = (englishBlock.match(/\{ title:/g) ?? []).length;
+  const contentIds = new Set([...content.matchAll(/^\s+"(english-\d{2})": \{/gm)].map((match) => match[1]));
+  const masteryIds = new Set([...mastery.matchAll(/^\s+"(english-\d{2})": q\(/gm)].map((match) => match[1]));
+
+  assert.equal(lessonCount, 24);
+  assert.equal(contentIds.size, 24);
+  assert.equal(masteryIds.size, 24);
+  for (let number = 1; number <= 24; number += 1) {
+    const id = `english-${String(number).padStart(2, "0")}`;
+    assert.ok(contentIds.has(id), `Conteúdo ausente em ${id}`);
+    assert.ok(masteryIds.has(id), `Check ausente em ${id}`);
+  }
+});
+
+test("a regra de RA aceita o formato usado pelo cadastro", async () => {
+  const rules = await read("firestore.rules");
+  assert.match(rules, /raKey\.matches\('\^\[0-9\]\{5,20\}-\[0-9A-Z\]\{1,2\}\$'\)/);
+  assert.doesNotMatch(rules, /raKey\.matches\('\^\[0-9\]\{5,20\}\$'\)/);
+});

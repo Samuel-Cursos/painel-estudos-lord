@@ -5,8 +5,8 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 ## O que existe hoje
 
 - Plano ENEM com 747 itens de estudo organizados por matéria e nível.
-- Caderno SAME com 1.000 questões: 400 de Matemática e 600 de Ciências da Natureza.
-- Versão textual das 1.000 questões e visualização do PDF original para contas autorizadas.
+- Banco principal com 2.000 questões: 400 de Matemática e 200 de cada uma das outras oito matérias do ENEM.
+- Linguagens, História, Geografia, Filosofia e Sociologia funcionam em formato nativo, com alternativas e correção imediata; o PDF original das quatro matérias iniciais continua disponível para contas autorizadas.
 - Banco rápido com correção para Linguagens, Matemática, Inglês, Natureza e Humanas.
 - Modo Prova completo nas 17 edições de 2009 a 2025: 3.060 questões dentro da Clareia, sem leitor de PDF e em uma sequência contínua de 180 questões.
 - Gabarito oficial, correção imediata, mapa de pendentes, cronômetro, retomada sincronizada, resultado por área e revisão de erros.

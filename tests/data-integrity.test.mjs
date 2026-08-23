@@ -23,23 +23,52 @@ test("o mapa ENEM preserva os números publicados", async () => {
   assert.equal(data.skills.filter((skill) => !skill.subject || !skill.level || !skill.topic || !skill.skill || !skill.relevance).length, 0);
 });
 
-test("as 1.000 questões têm matéria, trecho válido e versão textual", async () => {
-  const [bankSource, textSource] = await Promise.all([read("app/question-bank-data.ts"), read("app/question-text-data.ts")]);
+test("as 2.000 questões cobrem nove matérias com conteúdo válido", async () => {
+  const [bankSource, textSource] = await Promise.all([
+    read("app/question-bank-data.ts"),
+    read("app/question-text-data.ts"),
+  ]);
   const questionsMatch = bankSource.match(/export const questions: Question\[\] = (\[.*\]);\s*$/s);
   const textMatch = textSource.match(/export const questionText: Record<string, QuestionText> = (\{.*\});\s*$/s);
   assert.ok(questionsMatch);
   assert.ok(textMatch);
-  const questions = JSON.parse(questionsMatch[1]);
+  const originalQuestions = JSON.parse(questionsMatch[1]);
+  const expandedSubjects = ["portuguese", "history", "geography", "philosophy", "sociology"];
+  const expandedQuestions = [];
+  const expandedChapters = [];
+  for (const subject of expandedSubjects) {
+    const source = await read(`app/question-bank-expansion-${subject}.ts`);
+    const questionsMatch = source.match(new RegExp(`export const ${subject}Questions: Question\\[\\] = (\\[.*\\]);\\s*$`, "s"));
+    const chaptersMatch = source.match(new RegExp(`export const ${subject}QuestionChapters: QuestionChapter\\[\\] = (\\[.*?\\]);`, "s"));
+    assert.ok(questionsMatch, `Metadados ausentes em ${subject}`);
+    assert.ok(chaptersMatch, `Capítulos ausentes em ${subject}`);
+    expandedQuestions.push(...JSON.parse(questionsMatch[1]));
+    expandedChapters.push(...JSON.parse(chaptersMatch[1]));
+  }
+  const questions = [...originalQuestions, ...expandedQuestions];
   const questionText = JSON.parse(textMatch[1]);
+  const expandedQuestionText = {};
+  for (const chapter of expandedChapters) Object.assign(expandedQuestionText, JSON.parse(await read(`public/question-bank/${chapter.id}.json`)));
   const counts = Object.groupBy(questions, (question) => question.subject);
 
-  assert.equal(questions.length, 1000);
-  assert.deepEqual(Object.fromEntries(Object.entries(counts).map(([subject, items]) => [subject, items.length])), { math: 400, biology: 200, chemistry: 200, physics: 200 });
+  assert.equal(questions.length, 2000);
+  assert.deepEqual(Object.fromEntries(Object.entries(counts).map(([subject, items]) => [subject, items.length])), { math: 400, biology: 200, chemistry: 200, physics: 200, portuguese: 200, history: 200, geography: 200, philosophy: 200, sociology: 200 });
   assert.equal(Object.keys(questionText).length, 1000);
-  for (const question of questions) {
+  assert.equal(Object.keys(expandedQuestionText).length, 1000);
+  assert.equal(expandedChapters.length, 50);
+  for (const question of originalQuestions) {
     assert.ok(questionText[question.id]?.text.trim(), `Texto ausente em ${question.id}`);
     assert.ok(question.segments.length > 0, `Trecho ausente em ${question.id}`);
     assert.ok(question.segments.every((segment) => segment.page > 0 && segment.width > 0 && segment.height > 0), `Trecho inválido em ${question.id}`);
+  }
+  for (const question of expandedQuestions) {
+    const content = expandedQuestionText[question.id];
+    assert.equal(question.native, true, `Questão nativa sem marcação em ${question.id}`);
+    assert.equal(question.segments.length, 0, `Questão nativa ligada indevidamente ao PDF em ${question.id}`);
+    assert.match(question.correctAnswer, /^[A-E]$/, `Gabarito inválido em ${question.id}`);
+    assert.ok(content?.context.trim() || content?.statement.trim(), `Enunciado ausente em ${question.id}`);
+    assert.equal(content?.alternatives.length, 5, `Alternativas incompletas em ${question.id}`);
+    assert.ok(content?.alternatives.every((alternative) => alternative.letter && alternative.text.trim()), `Alternativa vazia em ${question.id}`);
   }
 });
 

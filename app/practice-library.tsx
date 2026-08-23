@@ -49,7 +49,7 @@ export default function PracticeLibrary({ progress, onProgressChange, onNotice, 
     }
   }
 
-  if (!enabled) return <section className="access-mode-banner"><span>OFF</span><div><strong>Questões rápidas pausadas pelo ADM</strong><p>Volte à aba Banco principal para continuar nas 1.000 questões.</p></div></section>;
+  if (!enabled) return <section className="access-mode-banner"><span>OFF</span><div><strong>Questões rápidas pausadas pelo ADM</strong><p>Volte à aba Banco principal para continuar nas 2.000 questões.</p></div></section>;
 
   return <section className="practice-library"><div className="section-heading"><div><span className="eyebrow">TREINO RÁPIDO · TODAS AS MATÉRIAS</span><h2>Questões rápidas com correção</h2><p>{allQuestions.length} questões curtas organizadas em 11 matérias, separadas do banco principal.</p></div><span className="practice-score">{completed}/{allQuestions.length} feitas</span></div>
     <div className="practice-filters"><button className={subject === "all" ? "active" : ""} onClick={() => setSubject("all")}>Todas <span>{allQuestions.length}</span></button>{practiceSubjectOrder.map((id) => <button key={id} className={subject === id ? "active" : ""} onClick={() => setSubject(id)}>{practiceSubjectNames[id]} <span>{allQuestions.filter((item) => item.subject === id).length}</span></button>)}</div>

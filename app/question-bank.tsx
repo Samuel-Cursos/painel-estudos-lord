@@ -5,12 +5,12 @@ import type { User } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
-  Question,
   QuestionSegment,
-  QuestionSubject,
-  questionChapters,
-  questions,
+  questionChapters as originalQuestionChapters,
+  questions as originalQuestions,
 } from "./question-bank-data";
+import type { Question, QuestionSubject } from "./question-bank-types";
+import { expandedQuestionChapters, expandedQuestions } from "./question-bank-expansion-data";
 import { firestore } from "./firebase-client";
 import { isOwner, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC } from "./access-control";
 import PracticeLibrary from "./practice-library";
@@ -45,10 +45,18 @@ type BankMode = "main" | "quick";
 
 const subjectMeta: Record<QuestionSubject, { name: string; short: string; color: string; icon: string }> = {
   math: { name: "Matemática", short: "MAT", color: "#477ee8", icon: "∑" },
+  portuguese: { name: "Linguagens", short: "LC", color: "#3478d4", icon: "Aa" },
   biology: { name: "Biologia", short: "BIO", color: "#35a873", icon: "DNA" },
   chemistry: { name: "Química", short: "QUI", color: "#9a6fe8", icon: "Qm" },
   physics: { name: "Física", short: "FIS", color: "#e56b61", icon: "F=" },
+  history: { name: "História", short: "HIS", color: "#d99b31", icon: "H" },
+  geography: { name: "Geografia", short: "GEO", color: "#e47c38", icon: "◎" },
+  philosophy: { name: "Filosofia", short: "FIL", color: "#51a976", icon: "φ" },
+  sociology: { name: "Sociologia", short: "SOC", color: "#dc639a", icon: "S" },
 };
+
+const allQuestionChapters = [...originalQuestionChapters, ...expandedQuestionChapters];
+const allQuestions: Question[] = [...originalQuestions, ...expandedQuestions];
 
 const topicAliases: Record<QuestionSubject, Array<[string[], string]>> = {
   math: [
@@ -85,6 +93,41 @@ const topicAliases: Record<QuestionSubject, Array<[string[], string]>> = {
     [["eletrodinâmica", "circuito", "corrente", "resistor"], "Eletrodinâmica"],
     [["eletromagnet"], "Eletromagnetismo"], [["hidrostática", "pressão"], "Hidrostática"], [["óptica", "luz"], "Óptica"],
   ],
+  portuguese: [
+    [["interpretação", "compreensão", "sentido"], "Interpretação de Textos"], [["gênero", "crônica", "notícia"], "Gêneros Textuais"],
+    [["variação", "oralidade", "registro", "norma"], "Variação Linguística"], [["gramática", "coesão", "sintaxe"], "Gramática em Contexto"],
+    [["função", "figura", "recurso", "argumentação"], "Funções e Recursos da Linguagem"], [["literatura", "lirismo", "romance", "poesia"], "Literatura Brasileira"],
+    [["arte", "cultura artística"], "Artes e Expressões Culturais"], [["tecnologia", "comunicação", "mídia"], "Tecnologias da Comunicação"],
+    [["cultura", "identidade", "patrimônio"], "Cultura e Identidade"], [["semiótica", "não verbal", "visual"], "Semiótica e Linguagem Não Verbal"],
+  ],
+  history: [
+    [["colônia", "expansão marítima"], "Brasil Colônia"], [["escravidão", "resistência", "abolição"], "Escravidão e Resistências"],
+    [["império"], "Brasil Império"], [["república", "vargas"], "República Brasileira"], [["ditadura", "redemocratização"], "Ditadura e Redemocratização"],
+    [["antiga", "medieval", "idade média"], "Antiguidade e Mundo Medieval"], [["moderna", "renascimento", "iluminismo"], "Idade Moderna"],
+    [["revolução", "industrialização"], "Revoluções e Industrialização"], [["guerra", "totalitarismo"], "Guerras e Totalitarismos"],
+    [["américa", "áfrica", "ásia", "imperialismo"], "América, África e Ásia"],
+  ],
+  geography: [
+    [["cartografia", "orientação", "mapa"], "Cartografia e Orientação"], [["clima", "vegetação"], "Clima e Vegetação"],
+    [["relevo", "solo", "hidrografia"], "Relevo, Solos e Hidrografia"], [["ambiental", "sustentabilidade"], "Questões Ambientais"],
+    [["agrária", "agricultura", "campo"], "Espaço Agrário"], [["urbanização", "cidade", "redes"], "Urbanização e Redes"],
+    [["população", "migração"], "População e Migrações"], [["economia", "globalização"], "Economia e Globalização"],
+    [["geopolítica", "território"], "Geopolítica e Território"], [["energia", "recursos naturais"], "Energia e Recursos Naturais"],
+  ],
+  philosophy: [
+    [["pré-socrática", "sócrates", "platão", "aristóteles", "antiga"], "Filosofia Antiga"], [["religiosa", "agostinho", "aquino", "medieval"], "Filosofia Medieval"],
+    [["racionalismo", "empirismo"], "Racionalismo e Empirismo"], [["iluminismo", "criticismo", "kant"], "Iluminismo e Criticismo"],
+    [["ética", "moral"], "Ética"], [["política", "estado", "democracia"], "Filosofia Política"], [["conhecimento", "epistemologia"], "Teoria do Conhecimento"],
+    [["contemporânea", "nietzsche", "foucault"], "Filosofia Contemporânea"], [["estética", "arte"], "Estética e Filosofia da Arte"],
+    [["lógica", "argumentação"], "Lógica e Argumentação"],
+  ],
+  sociology: [
+    [["sociólogo", "clássico", "durkheim", "weber", "marx"], "Pensamento Sociológico"], [["cultura", "identidade"], "Cultura e Identidade"],
+    [["trabalho", "classe"], "Trabalho e Sociedade"], [["desigualdade", "exclusão"], "Desigualdades Sociais"],
+    [["política", "democracia", "cidadania"], "Política, Estado e Democracia"], [["movimento social", "mobilização"], "Movimentos Sociais"],
+    [["indústria cultural", "mídia", "consumo"], "Mídia e Indústria Cultural"], [["violência", "controle"], "Violência e Controle Social"],
+    [["étnico", "racismo", "gênero"], "Questões Étnico-raciais e de Gênero"], [["globalização", "sociedade"], "Globalização e Sociedade"],
+  ],
 };
 
 function normalize(value: string) {
@@ -103,8 +146,8 @@ function localDateKey(date = new Date()) {
 function chapterForTopic(subject: QuestionSubject, topic: string) {
   const normalized = normalize(topic);
   const match = topicAliases[subject].find(([aliases]) => aliases.some((alias) => normalized.includes(normalize(alias))));
-  return questionChapters.find((chapter) => chapter.subject === subject && chapter.title === match?.[1])
-    ?? questionChapters.find((chapter) => chapter.subject === subject)!;
+  return allQuestionChapters.find((chapter) => chapter.subject === subject && chapter.title === match?.[1])
+    ?? allQuestionChapters.find((chapter) => chapter.subject === subject)!;
 }
 
 function QuestionCanvas({ pdf, segment }: { pdf: PDFDocumentProxy; segment: QuestionSegment }) {
@@ -151,24 +194,63 @@ function QuestionDocument({ pdf, question }: { pdf: PDFDocumentProxy; question: 
 }
 
 let questionTextPromise: Promise<typeof import("./question-text-data")> | null = null;
+const expandedChapterPromises = new Map<string, Promise<Record<string, { context: string; statement: string; alternatives: Array<{ letter: string; text: string }> }>>>();
+
+function loadExpandedChapter(chapterId: string) {
+  const cached = expandedChapterPromises.get(chapterId);
+  if (cached) return cached;
+  const request = fetch(`/question-bank/${chapterId}.json`).then((response) => {
+    if (!response.ok) throw new Error(`Falha ao carregar ${chapterId}`);
+    return response.json() as Promise<Record<string, { context: string; statement: string; alternatives: Array<{ letter: string; text: string }> }>>;
+  });
+  expandedChapterPromises.set(chapterId, request);
+  void request.catch(() => expandedChapterPromises.delete(chapterId));
+  return request;
+}
+
+type TextQuestionContent =
+  | { kind: "legacy"; text: string; needsVisual: boolean }
+  | { kind: "native"; context: string; statement: string; alternatives: Array<{ letter: string; text: string }> };
 
 function TextQuestion({ question }: { question: Question }) {
-  const [content, setContent] = useState<{ text: string; needsVisual: boolean } | null>(null);
+  const [content, setContent] = useState<TextQuestionContent | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let active = true;
-    questionTextPromise ??= import("./question-text-data");
-    void questionTextPromise.then((module) => { if (active) setContent(module.questionText[question.id] ?? null); });
+    if (question.native) {
+      void loadExpandedChapter(question.chapterId).then((chapterContent) => {
+        const nativeContent = chapterContent[question.id];
+        if (active) {
+          setFailed(false);
+          setContent(nativeContent ? { kind: "native", ...nativeContent } : null);
+        }
+      }).catch(() => { if (active) setFailed(true); });
+    } else {
+      questionTextPromise ??= import("./question-text-data");
+      void questionTextPromise.then((module) => {
+        const legacyContent = module.questionText[question.id];
+        if (active) setContent(legacyContent ? { kind: "legacy", ...legacyContent } : null);
+      });
+    }
     return () => { active = false; };
-  }, [question.id]);
+  }, [question.chapterId, question.id, question.native, reloadKey]);
+  if (failed) return <div className="question-pdf-placeholder"><span>!</span><strong>Não consegui carregar esta questão</strong><p>Verifique a conexão e tente abrir o conteúdo novamente.</p><button className="secondary" onClick={() => setReloadKey((key) => key + 1)}>Tentar novamente</button></div>;
   if (!content) return <div className="question-pdf-placeholder"><span>TXT</span><strong>Preparando o enunciado</strong><p>A versão em texto está sendo carregada.</p></div>;
-  return <div className="text-question-document">{content?.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content?.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
+  if (content.kind === "native") return <div className="native-question-document">
+    <span className="native-question-source">QUESTÃO OFICIAL · {question.source}</span>
+    {content.context && <div className="native-question-context">{content.context.split("\n").map((paragraph, index) => paragraph.trim() && <p key={`${question.id}-context-${index}`}>{paragraph}</p>)}</div>}
+    {content.statement && <p className="native-question-statement">{content.statement}</p>}
+    <div className="native-question-alternatives">{content.alternatives.map((alternative) => <div key={alternative.letter}><b>{alternative.letter}</b><span>{alternative.text}</span></div>)}</div>
+  </div>;
+  return <div className="text-question-document">{content.needsVisual && <div className="visual-dependency"><strong>Questão originalmente visual</strong><p>O texto foi preservado, mas gráfico, mapa, tabela ou figura não aparece nesta versão. Quem receber permissão do ADM vê o trecho original do PDF.</p></div>}<pre>{content.text || `Questão ${question.number} · ${question.chapter}\nO texto desta questão não pôde ser extraído com segurança. Use a questão rápida da matéria acima.`}</pre></div>;
 }
 
 export default function QuestionBank({ schoolYear, progress, focus, user, pdfAllowed, pdfEnabled, publicPracticeEnabled, dailyQuestionGoal, onProgressChange, onNotice }: Props) {
-  const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : questionChapters[0];
+  const initialChapter = focus ? chapterForTopic(focus.subject, focus.topic) : allQuestionChapters[0];
   const initialQuestion = focus
-    ? questions.find((question) => question.chapterId === initialChapter.id && !isQuestionAnswered(progress[question.id]))
-      ?? questions.find((question) => question.chapterId === initialChapter.id)
+    ? allQuestions.find((question) => question.chapterId === initialChapter.id && !isQuestionAnswered(progress[question.id]))
+      ?? allQuestions.find((question) => question.chapterId === initialChapter.id)
       ?? null
     : null;
   const [subject, setSubject] = useState<QuestionSubject>(focus?.subject ?? "math");
@@ -185,14 +267,14 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   const [bankMode, setBankMode] = useState<BankMode>("main");
   const showSame = isOwner(user?.email) || isHighSchool(schoolYear);
 
-  const chapters = useMemo(() => questionChapters.filter((chapter) => chapter.subject === subject), [subject]);
-  const answeredCount = questions.filter((question) => isQuestionAnswered(progress[question.id])).length;
+  const chapters = useMemo(() => allQuestionChapters.filter((chapter) => chapter.subject === subject), [subject]);
+  const answeredCount = allQuestions.filter((question) => isQuestionAnswered(progress[question.id])).length;
   const todayKey = localDateKey();
   const answeredToday = Object.values(progress).filter((attempt) => attempt.answeredAt?.slice(0, 10) === todayKey).length;
 
   const filtered = useMemo(() => {
     const query = normalize(search.trim());
-    return questions.filter((question) => {
+    return allQuestions.filter((question) => {
       if (question.subject !== subject || question.chapterId !== chapterId) return false;
       const attempt = progress[question.id];
       if (status === "answered" && !isQuestionAnswered(attempt)) return false;
@@ -273,12 +355,16 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   function chooseAnswer(choice: string) {
     if (!activeQuestion) return;
     updateAttempt(activeQuestion, { answer: choice, answeredAt: new Date().toISOString() });
-    onNotice(`Alternativa ${choice} salva. Como o PDF não traz gabarito, ela ficou registrada para conferência.`);
+    if (activeQuestion.correctAnswer) {
+      onNotice(choice === activeQuestion.correctAnswer ? "Resposta certa! Continue para consolidar o assunto." : `Ainda não. A resposta correta é ${activeQuestion.correctAnswer}; marque para revisar e tente outra do tema.`);
+    } else {
+      onNotice(`Alternativa ${choice} salva. Como o PDF não traz gabarito, ela ficou registrada para conferência.`);
+    }
   }
 
   function nextQuestion() {
     if (!activeQuestion) return;
-    const sameChapter = questions.filter((question) => question.chapterId === activeQuestion.chapterId);
+    const sameChapter = allQuestions.filter((question) => question.chapterId === activeQuestion.chapterId);
     const currentIndex = sameChapter.findIndex((question) => question.id === activeQuestion.id);
     const next = sameChapter.slice(currentIndex + 1).find((question) => !isQuestionAnswered(progress[question.id]))
       ?? sameChapter.find((question) => !isQuestionAnswered(progress[question.id]))
@@ -286,32 +372,32 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     openQuestion(next);
   }
 
-  const currentChapter = questionChapters.find((chapter) => chapter.id === chapterId)!;
+  const currentChapter = allQuestionChapters.find((chapter) => chapter.id === chapterId)!;
   const activeAttempt = activeQuestion ? progress[activeQuestion.id] ?? {} : {};
 
   return <div className="page-content question-page">
     {showSame ? <div className="same-bank-section">
     <section className="question-hero">
       <div>
-        <span className="eyebrow">CADERNO SAME · 1.000 QUESTÕES</span>
+        <span className="eyebrow">BANCO ENEM · 2.000 QUESTÕES</span>
         <h2>Pratique sem procurar.</h2>
-        <p>400 questões de Matemática e 600 de Biologia, Química e Física. Respostas, anotações e revisão ficam salvas.</p>
+        <p>Nove matérias em um só lugar: 400 questões de Matemática e 200 de cada outra matéria. Respostas, correção, anotações e revisão ficam salvas.</p>
       </div>
       <div className="question-stats">
         <article><strong>{answeredCount}</strong><span>respondidas</span></article>
-        <article><strong>{1000 - answeredCount}</strong><span>na fila</span></article>
+        <article><strong>{allQuestions.length - answeredCount}</strong><span>na fila</span></article>
         <article><strong>{answeredToday}/{dailyQuestionGoal}</strong><span>meta de hoje</span></article>
       </div>
     </section>
 
     <nav className="question-mode-tabs" aria-label="Tipo de questões">
-      <button className={bankMode === "main" ? "active" : ""} onClick={() => setBankMode("main")}><span>1.000</span><div><strong>Banco principal</strong><small>Matemática, Biologia, Química e Física</small></div></button>
+      <button className={bankMode === "main" ? "active" : ""} onClick={() => setBankMode("main")}><span>2.000</span><div><strong>Banco principal</strong><small>Nove matérias do ENEM organizadas por tema</small></div></button>
       <button className={bankMode === "quick" ? "active" : ""} onClick={() => setBankMode("quick")}><span>⚡</span><div><strong>Questões rápidas</strong><small>Treinos curtos com correção imediata</small></div></button>
     </nav>
 
     {bankMode === "main" ? <>
 
-    {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 1.000 questões ficam disponíveis na sua conta. O PDF original aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
+    {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 2.000 questões ficam disponíveis na sua conta. O PDF original das quatro matérias iniciais aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
     {pdfAllowed && !pdfEnabled && <section className="access-mode-banner"><span>OFF</span><div><strong>PDF pausado pelo ADM</strong><p>As questões continuam disponíveis em texto.</p></div></section>}
 
     {pdfState === "error" && <section className="pdf-setup error">
@@ -323,15 +409,15 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     <div className="question-workspace">
       <aside className="question-filters">
         <span className="filter-label">MATÉRIAS</span>
-        <div className="question-subject-tabs">{(Object.keys(subjectMeta) as QuestionSubject[]).map((id) => <button key={id} className={subject === id ? "active" : ""} style={{ "--accent": subjectMeta[id].color } as React.CSSProperties} onClick={() => { setSubject(id); setChapterId(questionChapters.find((chapter) => chapter.subject === id)!.id); setVisibleCount(80); }}><b>{subjectMeta[id].icon}</b><span>{subjectMeta[id].name}</span><small>{questions.filter((question) => question.subject === id).length}</small></button>)}</div>
+        <div className="question-subject-tabs">{(Object.keys(subjectMeta) as QuestionSubject[]).map((id) => <button key={id} className={subject === id ? "active" : ""} style={{ "--accent": subjectMeta[id].color } as React.CSSProperties} onClick={() => { setSubject(id); setChapterId(allQuestionChapters.find((chapter) => chapter.subject === id)!.id); setVisibleCount(80); }}><b>{subjectMeta[id].icon}</b><span>{subjectMeta[id].name}</span><small>{allQuestions.filter((question) => question.subject === id).length}</small></button>)}</div>
         <span className="filter-label chapter-label">CAPÍTULOS</span>
-        <div className="question-chapter-list">{chapters.map((chapter) => { const done = questions.filter((question) => question.chapterId === chapter.id && (progress[question.id]?.answer || progress[question.id]?.note?.trim())).length; return <button key={chapter.id} className={chapterId === chapter.id ? "active" : ""} onClick={() => { setChapterId(chapter.id); setVisibleCount(80); }}><span>{chapter.number}</span><div><strong>{chapter.title}</strong><small>{done} de {chapter.count}</small></div></button>; })}</div>
+        <div className="question-chapter-list">{chapters.map((chapter) => { const done = allQuestions.filter((question) => question.chapterId === chapter.id && (progress[question.id]?.answer || progress[question.id]?.note?.trim())).length; return <button key={chapter.id} className={chapterId === chapter.id ? "active" : ""} onClick={() => { setChapterId(chapter.id); setVisibleCount(80); }}><span>{chapter.number}</span><div><strong>{chapter.title}</strong><small>{done} de {chapter.count}</small></div></button>; })}</div>
       </aside>
 
       <main className="question-list-panel">
         <div className="question-list-head"><div><span className="eyebrow">CAPÍTULO {currentChapter.number}</span><h3>{currentChapter.title}</h3><p>Questões {currentChapter.start}–{currentChapter.end} · {subjectMeta[subject].name}</p></div><button className="primary" onClick={() => openQuestion(filtered.find((question) => !isQuestionAnswered(progress[question.id])) ?? filtered[0] ?? null)}>Começar próxima →</button></div>
         <div className="question-toolbar"><input value={search} onChange={(event) => { setSearch(event.target.value); setVisibleCount(80); }} placeholder="Buscar número, ano ou capítulo" /><div>{(["all", "pending", "answered", "review"] as StatusFilter[]).map((item) => <button key={item} className={status === item ? "active" : ""} onClick={() => { setStatus(item); setVisibleCount(80); }}>{item === "all" ? "Todas" : item === "pending" ? "Não feitas" : item === "answered" ? "Respondidas" : "Revisar"}</button>)}</div></div>
-        <div className="question-grid">{filtered.slice(0, visibleCount).map((question) => { const attempt = progress[question.id]; return <button key={question.id} className={`question-card ${attempt?.answer || attempt?.note?.trim() ? "answered" : ""} ${attempt?.review ? "review" : ""}`} onClick={() => openQuestion(question)}><span className="question-number">{attempt?.answer ? attempt.answer : question.number}</span><div><small>QUESTÃO {question.number} · {question.source || "ENEM"}</small><strong>{question.chapter}</strong><em>{attempt?.answer ? `Alternativa ${attempt.answer} marcada` : attempt?.note?.trim() ? "Resposta escrita salva" : "Ainda não respondida"}</em></div><b>{attempt?.review ? "★" : "→"}</b></button>; })}</div>
+        <div className="question-grid">{filtered.slice(0, visibleCount).map((question) => { const attempt = progress[question.id]; const corrected = Boolean(attempt?.answer && question.correctAnswer); const correct = corrected && attempt?.answer === question.correctAnswer; return <button key={question.id} className={`question-card ${attempt?.answer || attempt?.note?.trim() ? "answered" : ""} ${corrected ? (correct ? "correct" : "incorrect") : ""} ${attempt?.review ? "review" : ""}`} onClick={() => openQuestion(question)}><span className="question-number">{attempt?.answer ? attempt.answer : question.number}</span><div><small>QUESTÃO {question.number} · {question.source || "ENEM"}</small><strong>{question.chapter}</strong><em>{corrected ? (correct ? "Resposta correta" : `Revisar · gabarito ${question.correctAnswer}`) : attempt?.answer ? `Alternativa ${attempt.answer} marcada` : attempt?.note?.trim() ? "Resposta escrita salva" : "Ainda não respondida"}</em></div><b>{attempt?.review ? "★" : "→"}</b></button>; })}</div>
         {!filtered.length && <div className="question-empty"><span>○</span><strong>Nenhuma questão neste filtro.</strong><p>Troque o status ou limpe a busca.</p></div>}
         {visibleCount < filtered.length && <button className="load-more" onClick={() => setVisibleCount((count) => count + 80)}>Mostrar mais questões</button>}
       </main>
@@ -343,9 +429,9 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
 
       <div className="question-solve-layout">
         <div className="question-paper">
-          {pdfAllowed && pdfEnabled ? (pdfDocument ? <QuestionDocument pdf={pdfDocument} question={activeQuestion} /> : <div className="question-pdf-placeholder"><span>{pdfState === "loading" ? "…" : "PDF"}</span><strong>{pdfState === "loading" ? "Abrindo seu PDF protegido" : "Não consegui abrir o caderno"}</strong><p>{pdfState === "loading" ? "O Firebase está verificando sua permissão." : "Confirme no ADM se o arquivo já foi enviado e sua conta está liberada."}</p></div>) : <TextQuestion key={activeQuestion.id} question={activeQuestion} />}
+          {!activeQuestion.native && pdfAllowed && pdfEnabled ? (pdfDocument ? <QuestionDocument pdf={pdfDocument} question={activeQuestion} /> : <div className="question-pdf-placeholder"><span>{pdfState === "loading" ? "…" : "PDF"}</span><strong>{pdfState === "loading" ? "Abrindo seu PDF protegido" : "Não consegui abrir o caderno"}</strong><p>{pdfState === "loading" ? "O Firebase está verificando sua permissão." : "Confirme no ADM se o arquivo já foi enviado e sua conta está liberada."}</p></div>) : <TextQuestion key={activeQuestion.id} question={activeQuestion} />}
         </div>
-        <aside className="answer-panel"><span className="eyebrow">SUA RESPOSTA</span><h3>Marque uma alternativa</h3><p>O material não inclui gabarito. Sua escolha será salva para você conferir depois.</p><div className="answer-options">{["A", "B", "C", "D", "E"].map((choice) => <button key={choice} className={activeAttempt.answer === choice ? "selected" : ""} onClick={() => chooseAnswer(choice)}><span>{choice}</span>{activeAttempt.answer === choice ? "Alternativa marcada" : `Escolher ${choice}`}</button>)}</div><label className="reasoning-box"><span>Raciocínio ou resposta escrita</span><textarea maxLength={1500} value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} onBlur={() => updateAttempt(activeQuestion, { note: noteDraft, answeredAt: noteDraft.trim() ? activeAttempt.answeredAt ?? new Date().toISOString() : activeAttempt.answeredAt })} placeholder="Escreva sua conta, justificativa ou resposta aqui…" /></label><small className="auto-save-note">A alternativa salva no clique. O texto salva ao sair da caixa.</small></aside>
+        <aside className="answer-panel"><span className="eyebrow">SUA RESPOSTA</span><h3>Marque uma alternativa</h3><p>{activeQuestion.correctAnswer ? "A correção sai na hora e seu progresso fica salvo." : "O material original não inclui gabarito. Sua escolha será salva para você conferir depois."}</p>{activeAttempt.answer && activeQuestion.correctAnswer && <div className={`answer-feedback ${activeAttempt.answer === activeQuestion.correctAnswer ? "correct" : "incorrect"}`}><strong>{activeAttempt.answer === activeQuestion.correctAnswer ? "✓ Você acertou" : "↻ Vale revisar"}</strong><span>{activeAttempt.answer === activeQuestion.correctAnswer ? "Boa! Avance para a próxima do assunto." : `Você marcou ${activeAttempt.answer}. O gabarito é ${activeQuestion.correctAnswer}.`}</span></div>}<div className="answer-options">{["A", "B", "C", "D", "E"].map((choice) => { const isSelected = activeAttempt.answer === choice; const isCorrect = Boolean(activeAttempt.answer && activeQuestion.correctAnswer === choice); return <button key={choice} className={`${isSelected ? "selected" : ""} ${isCorrect ? "correct" : ""} ${isSelected && activeQuestion.correctAnswer && !isCorrect ? "incorrect" : ""}`} onClick={() => chooseAnswer(choice)}><span>{choice}</span>{isSelected ? "Alternativa marcada" : isCorrect ? "Resposta correta" : `Escolher ${choice}`}</button>; })}</div><label className="reasoning-box"><span>Raciocínio ou resposta escrita</span><textarea maxLength={1500} value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} onBlur={() => updateAttempt(activeQuestion, { note: noteDraft, answeredAt: noteDraft.trim() ? activeAttempt.answeredAt ?? new Date().toISOString() : activeAttempt.answeredAt })} placeholder="Escreva sua interpretação, justificativa ou dúvida aqui…" /></label><small className="auto-save-note">A alternativa salva no clique. O texto salva ao sair da caixa.</small></aside>
       </div>
       <footer className="question-modal-actions"><button className="secondary" onClick={() => setActiveQuestion(null)}>Voltar ao caderno</button><div><span>{activeAttempt.answer || activeAttempt.note?.trim() ? "Resposta registrada" : "Ainda não respondida"}</span><button className="primary" onClick={nextQuestion}>Próxima do assunto →</button></div></footer>
     </section></div>}

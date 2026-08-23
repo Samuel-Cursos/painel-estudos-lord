@@ -59,7 +59,7 @@ Espere o deploy ficar **Ready** e confira:
 - Redação, textos de apoio, projeto de texto, editor e rascunho;
 - publicação de propostas e redações-modelo pelo ADM;
 - Início, Plano ENEM, Questões, Inglês e Agenda;
-- carregamento textual das 1.000 questões;
+- carregamento textual das 2.000 questões;
 - PDF em uma conta liberada pelo ADM;
 - Central ADM, configurações e histórico;
 - celular e computador;
@@ -71,6 +71,6 @@ Endereço oficial: `https://painel-estudos-lord.vercel.app`
 
 - A Clareia não pede série, data de nascimento ou e-mail institucional.
 - O Google autentica; nome e RA + dígito identificam o perfil do estudante.
-- O caderno de 1.000 questões cobre Matemática, Biologia, Química e Física.
+- O banco principal de 2.000 questões cobre as nove matérias do plano ENEM: Matemática, Linguagens, Biologia, Química, Física, História, Geografia, Filosofia e Sociologia.
 - As 24 aulas de Inglês e seus checks funcionam dentro do próprio site; o apoio do ChatGPT é opcional.
 - Só a conta proprietária acessa o ADM e tem acesso permanente ao PDF.

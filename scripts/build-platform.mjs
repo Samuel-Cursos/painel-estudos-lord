@@ -7,6 +7,17 @@ const isVercel = process.env.VERCEL === "1";
 
 if (!isVercel) rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
 
+const audit = spawnSync(process.execPath, ["scripts/audit-question-answer-key.mjs"], {
+  cwd: process.cwd(),
+  env: process.env,
+  stdio: "inherit",
+});
+if (audit.error) {
+  console.error(audit.error.message);
+  process.exit(1);
+}
+if ((audit.status ?? 1) !== 0) process.exit(audit.status ?? 1);
+
 const command = isVercel ? process.execPath : "bash";
 const args = isVercel
   ? [require.resolve("next/dist/bin/next"), "build", "--webpack"]

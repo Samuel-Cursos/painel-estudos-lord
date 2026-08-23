@@ -1,0 +1,58 @@
+/* Correções pontuais de UX sem alterar a identidade visual da Clareia. */
+
+/* Avisos rápidos: ficam visíveis o suficiente para leitura e somem sozinhos. */
+.notice {
+  animation: clareia-notice-auto-hide 1.8s ease forwards !important;
+}
+
+@keyframes clareia-notice-auto-hide {
+  0%, 72% {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+  }
+  99% {
+    opacity: 0;
+    transform: translateY(-8px);
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px);
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/*
+ * Depois da correção, não deixe a alternativa continuar dizendo apenas
+ * “Alternativa marcada”. Mostre claramente o resultado e, quando houver erro,
+ * mantenha a alternativa correta identificada.
+ */
+.answer-options button.correct,
+.answer-options button.incorrect {
+  font-size: 0 !important;
+}
+
+.answer-options button.correct > span,
+.answer-options button.incorrect > span {
+  font-size: 1rem !important;
+}
+
+.answer-options button.correct::after,
+.answer-options button.incorrect::after {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.answer-options button.correct::after {
+  content: "Resposta correta";
+}
+
+.answer-options button.selected.correct::after {
+  content: "Você acertou";
+}
+
+.answer-options button.selected.incorrect::after {
+  content: "Você errou";
+}

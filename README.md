@@ -9,6 +9,7 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 - Versão textual das 1.000 questões e visualização do PDF original para contas autorizadas.
 - Banco rápido com correção para Linguagens, Matemática, Inglês, Natureza e Humanas.
 - Biblioteca das 28 edições oficiais do ENEM, de 1998 a 2025, com acesso aos cadernos e gabaritos do INEP, folha de respostas sincronizada e registro de desempenho.
+- Modo Prova completo nas edições de 2011 a 2019: PDF oficial dentro da Clareia, cronômetro, escolha de Inglês/Espanhol, cartão-resposta, correção automática por área e revisão de erros.
 - Estúdio de Redação com propostas, coletâneas, projeto de texto, editor, rascunho automático, correção e histórico.
 - Trilha introdutória de Inglês A1–A2 com 24 aulas dentro da plataforma, vocabulário, exemplos, prática e check de domínio.
 - Agenda pessoal com prazos, ordenação e aviso de atraso.
@@ -24,7 +25,7 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 
 A senha do Google nunca passa pela Clareia. O PDF não fica no GitHub nem na Vercel: o ADM valida o arquivo, divide em partes menores e grava o conteúdo protegido no Firestore.
 
-Os cadernos e gabaritos antigos permanecem nos endereços oficiais do INEP. A Clareia organiza os anos e guarda somente as respostas, anotações e resultados do estudante.
+Os cadernos e gabaritos antigos permanecem nos endereços oficiais do INEP. A Clareia organiza os anos e guarda somente as respostas, anotações e resultados do estudante. A correção automática mostra acertos brutos; ela não tenta reproduzir a nota TRI oficial.
 
 ## Desenvolvimento
 

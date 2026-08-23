@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import OfficialExamSimulator, { type OfficialExamResult, type SimulatorAnswerSheet } from "./official-exam-simulator";
+import { officialExamSimulations, officialSimulatorYears } from "./enem-official-simulations";
 
 export type AssessmentRecord = { date: string; lc: string; ch: string; cn: string; math: string; objective?: string; time: string };
 export type AssessmentMap = Record<string, AssessmentRecord>;
-export type ExamAnswerSheet = { answers: Record<string, string>; notes: string; updatedAt: string };
+export type ExamAnswerSheet = SimulatorAnswerSheet;
 export type ExamAnswerSheetMap = Record<string, ExamAnswerSheet>;
 
 type Application = "regular" | "ppl" | "digital";
@@ -12,6 +14,7 @@ type Props = {
   assessments: AssessmentMap;
   answerSheets: ExamAnswerSheetMap;
   onAssessmentChange: (name: string, record: AssessmentRecord) => void;
+  onAssessmentResult: (name: string, record: AssessmentRecord) => void;
   onAssessmentsPersist: () => void;
   onAnswerSheetsChange: (next: ExamAnswerSheetMap) => void;
   onAnswerSheetsPersist: (next: ExamAnswerSheetMap) => void;
@@ -69,11 +72,12 @@ function total(record?: AssessmentRecord) {
   return [record.lc, record.ch, record.cn, record.math].reduce((sum, value) => sum + (Number(value) || 0), 0);
 }
 
-export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentChange, onAssessmentsPersist, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice }: Props) {
-  const [selectedYear, setSelectedYear] = useState(2025);
+export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentChange, onAssessmentResult, onAssessmentsPersist, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice }: Props) {
+  const [selectedYear, setSelectedYear] = useState(2019);
   const [application, setApplication] = useState<Application>("regular");
   const [day, setDay] = useState<1 | 2>(1);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const modernFormat = selectedYear >= 2009;
   const effectiveDay = modernFormat ? day : 1;
   const questionStart = modernFormat && effectiveDay === 2 ? 91 : 1;
@@ -85,6 +89,7 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
   const examName = assessmentName(selectedYear, application);
   const empty: AssessmentRecord = { date: "", lc: "", ch: "", cn: "", math: "", objective: "", time: "" };
   const record = assessments[examName] ?? empty;
+  const simulatorEdition = application === "regular" ? officialExamSimulations[selectedYear] : undefined;
   const groupedYears = useMemo(() => [
     { title: "Edições recentes", detail: "Formato atual e materiais de acessibilidade", years: officialExamYears.filter((year) => year >= 2020) },
     { title: "Nova matriz do ENEM", detail: "180 questões divididas em dois dias", years: officialExamYears.filter((year) => year >= 2009 && year < 2020) },
@@ -100,7 +105,7 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
     const nextAnswers = { ...sheet.answers };
     if (nextAnswers[String(question)] === answer) delete nextAnswers[String(question)];
     else nextAnswers[String(question)] = answer;
-    updateSheet({ ...sheet, answers: nextAnswers });
+    updateSheet({ ...sheet, answers: nextAnswers, status: "in_progress", result: undefined });
   }
 
   function clearSheet() {
@@ -112,6 +117,34 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
     onNotice("Folha de respostas limpa.");
   }
 
+  function replaceCurrentSheet(nextSheet: ExamAnswerSheet, persist = false) {
+    const next = { ...answerSheets, [sheetKey]: nextSheet };
+    onAnswerSheetsChange(next);
+    if (persist) onAnswerSheetsPersist(next);
+  }
+
+  function finishOfficialSimulation(result: OfficialExamResult, nextSheet: ExamAnswerSheet) {
+    const nextSheets = { ...answerSheets, [sheetKey]: nextSheet };
+    const dayOne = effectiveDay === 1 ? nextSheet : nextSheets[`${selectedYear}-${application}-d1`];
+    const dayTwo = effectiveDay === 2 ? nextSheet : nextSheets[`${selectedYear}-${application}-d2`];
+    const totalSeconds = (dayOne?.elapsedSeconds ?? 0) + (dayTwo?.elapsedSeconds ?? 0);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const updated: AssessmentRecord = {
+      ...record,
+      date: record.date || new Date().toISOString().slice(0, 10),
+      lc: result.areas.lc ? String(result.areas.lc.correct) : record.lc,
+      ch: result.areas.ch ? String(result.areas.ch.correct) : record.ch,
+      cn: result.areas.cn ? String(result.areas.cn.correct) : record.cn,
+      math: result.areas.math ? String(result.areas.math.correct) : record.math,
+      time: totalSeconds ? `${hours}h${String(minutes).padStart(2, "0")}` : record.time,
+    };
+    onAnswerSheetsChange(nextSheets);
+    onAnswerSheetsPersist(nextSheets);
+    onAssessmentResult(examName, updated);
+    onNotice(`ENEM ${selectedYear} · ${effectiveDay}º dia corrigido: ${result.correct}/90 acertos.`);
+  }
+
   function setRecord(field: keyof AssessmentRecord, value: string) {
     const max = field === "objective" ? (modernFormat ? 180 : 63) : 45;
     const cleaned = field === "date" ? value : field === "time" ? value.replace(/[^0-9hm: ]/gi, "").slice(0, 8) : cleanScore(value, max);
@@ -120,11 +153,13 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
 
   return <div className="exam-library">
     <button className="back-link assessment-back" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>↑ Voltar ao início da biblioteca</button>
-    <section className="assessment-hero exam-library-hero"><div><span className="eyebrow">ACERVO OFICIAL · INEP</span><h2>Provas do ENEM de 1998 a 2025</h2><p>Escolha o ano, abra o caderno e o gabarito oficiais em outra guia e marque suas respostas na Clareia. As edições antigas usam o Repositório Institucional do INEP (RIEP).</p></div><aside><strong>28</strong><span>edições organizadas</span><strong>100%</strong><span>fonte oficial</span></aside></section>
+    <section className="assessment-hero exam-library-hero"><div><span className="eyebrow">ACERVO OFICIAL · INEP</span><h2>Provas do ENEM de 1998 a 2025</h2><p>Escolha o ano e treine com o caderno oficial. Nas edições com Modo Prova, você lê, responde, controla o tempo e recebe a correção sem sair da Clareia.</p></div><aside><strong>28</strong><span>edições organizadas</span><strong>{officialSimulatorYears.length}</strong><span>simulados automáticos</span></aside></section>
 
-    <section className="section-block exam-year-browser"><div className="section-heading"><div><span className="eyebrow">1 · ESCOLHA A EDIÇÃO</span><h2>Biblioteca por ano</h2></div><span className="muted">1998—2025</span></div>{groupedYears.map((group) => <div className="exam-year-group" key={group.title}><div><strong>{group.title}</strong><small>{group.detail}</small></div><div>{group.years.map((year) => <button key={year} className={selectedYear === year ? "active" : ""} onClick={() => { setSelectedYear(year); setApplication("regular"); setDay(1); setSheetOpen(false); }}>{year}<small>{year >= 2009 ? "2 dias" : "1 dia"}</small></button>)}</div></div>)}</section>
+    <section className="section-block exam-year-browser"><div className="section-heading"><div><span className="eyebrow">1 · ESCOLHA A EDIÇÃO</span><h2>Biblioteca por ano</h2></div><span className="muted">1998—2025</span></div><div className="simulator-legend"><span>✓</span><p><strong>Modo Prova disponível</strong> nas edições marcadas: caderno amarelo oficial + correção automática.</p></div>{groupedYears.map((group) => <div className="exam-year-group" key={group.title}><div><strong>{group.title}</strong><small>{group.detail}</small></div><div>{group.years.map((year) => <button key={year} className={`${selectedYear === year ? "active" : ""} ${officialExamSimulations[year] ? "has-simulator" : ""}`} onClick={() => { setSelectedYear(year); setApplication("regular"); setDay(1); setSheetOpen(false); setSimulatorOpen(false); }}>{year}<small>{officialExamSimulations[year] ? "✓ modo prova" : year >= 2009 ? "2 dias" : "1 dia"}</small></button>)}</div></div>)}</section>
 
-    <section className="section-block selected-exam"><div className="selected-exam-head"><div><span className="eyebrow">2 · ABRA O MATERIAL</span><h2>ENEM {selectedYear}</h2><p>{modernFormat ? "180 questões: Linguagens e Humanas no 1º dia; Natureza e Matemática no 2º dia." : "Formato clássico: 63 questões interdisciplinares e redação em uma única aplicação."}</p></div><a className="primary official-exam-link" href={officialExamUrl(selectedYear)} target="_blank" rel="noreferrer">Abrir prova e gabarito oficiais ↗</a></div><div className="exam-instruction"><span>i</span><p>{selectedYear < 2020 ? <>O RIEP abre diretamente o item do <strong>caderno amarelo regular</strong> com os arquivos oficiais disponíveis para essa edição.</> : <>No portal do INEP, escolha <strong>a mesma cor e aplicação do seu caderno</strong>. Prova e gabarito ficam juntos na página do ano.</>}</p></div><div className="exam-setup"><label><span>Aplicação</span><select value={application} onChange={(event) => { setApplication(event.target.value as Application); setSheetOpen(false); }}>{availableApplications.map((item) => <option key={item} value={item}>{applicationLabel(item)}</option>)}</select></label>{modernFormat && <label><span>Dia da prova</span><select value={day} onChange={(event) => { setDay(Number(event.target.value) as 1 | 2); setSheetOpen(false); }}><option value={1}>1º dia · questões 1–90</option><option value={2}>2º dia · questões 91–180</option></select></label>}<button className="secondary" onClick={() => setSheetOpen((value) => !value)}>{sheetOpen ? "Fechar folha" : `Responder na Clareia · ${answered}/${questionEnd - questionStart + 1}`}</button></div>
+    <section className="section-block selected-exam"><div className="selected-exam-head"><div><span className="eyebrow">2 · PREPARE A APLICAÇÃO</span><h2>ENEM {selectedYear}</h2><p>{modernFormat ? selectedYear <= 2016 ? "180 questões: Humanas e Natureza no 1º dia; Linguagens, Redação e Matemática no 2º dia." : "180 questões: Linguagens, Redação e Humanas no 1º dia; Natureza e Matemática no 2º dia." : "Formato clássico: 63 questões interdisciplinares e redação em uma única aplicação."}</p></div><div className="selected-exam-actions">{simulatorEdition && <button className="primary" onClick={() => { setSimulatorOpen(true); setSheetOpen(false); }}>Fazer prova na Clareia</button>}<a className={simulatorEdition ? "secondary official-exam-link" : "primary official-exam-link"} href={officialExamUrl(selectedYear)} target="_blank" rel="noreferrer">Ver arquivos oficiais ↗</a></div></div><div className={`exam-instruction ${simulatorEdition ? "success" : ""}`}><span>{simulatorEdition ? "✓" : "i"}</span><p>{simulatorEdition ? <>Esta edição tem <strong>Modo Prova completo</strong> para o caderno amarelo regular: leitor, cronômetro, cartão-resposta e correção automática.</> : selectedYear < 2020 ? <>O acervo oficial permanece disponível e a folha pode ser preenchida na Clareia. A correção automática será liberada somente depois da validação do gabarito desta edição.</> : <>No portal do INEP, escolha <strong>a mesma cor e aplicação do seu caderno</strong>. Prova e gabarito ficam juntos na página do ano.</>}</p></div><div className="exam-setup"><label><span>Aplicação</span><select value={application} onChange={(event) => { setApplication(event.target.value as Application); setSheetOpen(false); setSimulatorOpen(false); }}>{availableApplications.map((item) => <option key={item} value={item}>{applicationLabel(item)}</option>)}</select></label>{modernFormat && <label><span>Dia da prova</span><select value={day} onChange={(event) => { setDay(Number(event.target.value) as 1 | 2); setSheetOpen(false); setSimulatorOpen(false); }}><option value={1}>1º dia · questões 1–90</option><option value={2}>2º dia · questões 91–180</option></select></label>}<button className="secondary" onClick={() => { setSheetOpen((value) => !value); setSimulatorOpen(false); }}>{sheetOpen ? "Fechar folha" : `Abrir somente cartão · ${answered}/${questionEnd - questionStart + 1}`}</button></div>
+
+      {simulatorOpen && simulatorEdition && <OfficialExamSimulator key={sheetKey} edition={simulatorEdition} day={effectiveDay as 1 | 2} sheet={sheet} onChange={(next) => replaceCurrentSheet(next)} onPersist={(next) => replaceCurrentSheet(next, true)} onFinish={finishOfficialSimulation} onClose={(next) => { replaceCurrentSheet(next, true); setSimulatorOpen(false); }} />}
 
       {sheetOpen && <div className="answer-sheet"><div className="answer-sheet-head"><div><span className="eyebrow">3 · MARQUE SUAS RESPOSTAS</span><h3>{modernFormat ? `${effectiveDay}º dia` : "Prova única"} · questões {questionStart}–{questionEnd}</h3><p>Clique novamente na mesma letra para apagar. A folha fica guardada neste aparelho até você sincronizar.</p></div><div className="answer-progress"><strong>{answered}</strong><span>de {questionEnd - questionStart + 1}</span></div></div><div className="answer-question-grid">{Array.from({ length: questionEnd - questionStart + 1 }, (_, index) => questionStart + index).map((question) => <div className={sheet.answers[String(question)] ? "answered" : ""} key={question}><strong>{question}</strong><span>{options.map((option) => <button key={option} className={sheet.answers[String(question)] === option ? "active" : ""} aria-label={`Questão ${question}, alternativa ${option}`} onClick={() => chooseAnswer(question, option)}>{option}</button>)}</span></div>)}</div><label className="exam-notes"><span>Anotações desta aplicação</span><textarea maxLength={1200} value={sheet.notes} onChange={(event) => updateSheet({ ...sheet, notes: event.target.value })} placeholder="Questões para revisar, assunto que mais apareceu, controle de tempo…" /></label><div className="answer-sheet-actions"><button className="danger-outline" onClick={clearSheet}>Limpar esta folha</button><button className="primary" onClick={() => { onAnswerSheetsPersist(answerSheets); onNotice("Folha de respostas sincronizada."); }}>Salvar folha na conta</button></div></div>}
     </section>

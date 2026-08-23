@@ -55,6 +55,7 @@ Espere o deploy ficar **Ready** e confira:
 
 - entrada com Google e cadastro de um perfil novo;
 - biblioteca oficial de provas de 1998 a 2025, folha de respostas e resultado;
+- Modo Prova 2011–2019 com caderno amarelo na tela, cronômetro, cartão-resposta e correção automática por área;
 - Redação, textos de apoio, projeto de texto, editor e rascunho;
 - publicação de propostas e redações-modelo pelo ADM;
 - Início, Plano ENEM, Questões, Inglês e Agenda;

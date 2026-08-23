@@ -69,6 +69,24 @@ test("a biblioteca oficial cobre todas as edições de 1998 a 2025", async () =>
   assert.match(source, /onAnswerSheetsPersist/);
 });
 
+test("o Modo Prova usa nove gabaritos oficiais completos", async () => {
+  const [data, simulator, library] = await Promise.all([
+    read("app/enem-official-simulations.ts"),
+    read("app/official-exam-simulator.tsx"),
+    read("app/enem-exam-library.tsx"),
+  ]);
+  const years = [...data.matchAll(/^\s{2}(20\d{2}): \{/gm)].map((match) => Number(match[1]));
+  const keys = [...data.matchAll(/answerKey: "([A-E]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(years, [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]);
+  assert.equal(keys.length, 9);
+  assert.ok(keys.every((key) => key.length === 180));
+  assert.equal((data.match(/bookletUrls:/g) ?? []).length, 10);
+  assert.match(simulator, /Finalizar dia e ver resultado/);
+  assert.match(simulator, /officialAnswerFor/);
+  assert.match(simulator, /A nota oficial do ENEM usa a TRI/);
+  assert.match(library, /onAssessmentResult/);
+});
+
 test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async () => {
   const [studio, materials, admin, rules] = await Promise.all([read("app/writing-studio.tsx"), read("app/writing-materials.ts"), read("app/admin-panel.tsx"), read("firestore.rules")]);
   assert.equal((materials.match(/kind: "prompt"/g) ?? []).length, 3);

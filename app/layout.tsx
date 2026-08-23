@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./simulator.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Clareia | Preparação ENEM",
-  description: "Plano completo do ENEM, 1.000 questões, provas oficiais de 1998 a 2025, estúdio de Redação e 24 aulas de Inglês.",
+  description: "Plano completo do ENEM, 1.000 questões, provas oficiais com correção automática, estúdio de Redação e 24 aulas de Inglês.",
   other: {
     "codex-preview": "development",
   },

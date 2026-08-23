@@ -1,5 +1,6 @@
 "use client";
 
+import "./question-bank-answer-key";
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { practiceQuestions, type MasteryQuestion } from "./mastery-data";

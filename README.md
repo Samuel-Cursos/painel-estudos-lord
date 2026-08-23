@@ -8,11 +8,11 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 - Caderno SAME com 1.000 questões: 400 de Matemática e 600 de Ciências da Natureza.
 - Versão textual das 1.000 questões e visualização do PDF original para contas autorizadas.
 - Banco rápido com correção para Linguagens, Matemática, Inglês, Natureza e Humanas.
-- Registro de 35 provas antigas e 12 simulados.
-- Redação com nota, competência prioritária, próximo passo e histórico.
+- Biblioteca das 28 edições oficiais do ENEM, de 1998 a 2025, com acesso aos cadernos e gabaritos do INEP, folha de respostas sincronizada e registro de desempenho.
+- Estúdio de Redação com propostas, coletâneas, projeto de texto, editor, rascunho automático, correção e histórico.
 - Trilha introdutória de Inglês A1–A2 com 24 aulas dentro da plataforma, vocabulário, exemplos, prática e check de domínio.
 - Agenda pessoal com prazos, ordenação e aviso de atraso.
-- Central ADM para usuários, permissões do PDF, bloqueio, zeragem de progresso, conteúdo, aviso geral, manutenção e auditoria.
+- Central ADM para usuários, permissões do PDF, bloqueio, zeragem de progresso, questões, propostas de redação, redações de apoio, aviso geral, manutenção e auditoria.
 
 ## Acesso e dados
 
@@ -23,6 +23,8 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 5. Somente a conta proprietária definida em `app/access-control.ts` e nas regras enxerga o ADM.
 
 A senha do Google nunca passa pela Clareia. O PDF não fica no GitHub nem na Vercel: o ADM valida o arquivo, divide em partes menores e grava o conteúdo protegido no Firestore.
+
+Os cadernos e gabaritos antigos permanecem nos endereços oficiais do INEP. A Clareia organiza os anos e guarda somente as respostas, anotações e resultados do estudante.
 
 ## Desenvolvimento
 

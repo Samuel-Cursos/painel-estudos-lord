@@ -6,16 +6,19 @@ import { Bytes, addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, orde
 import { defaultAppSettings, isOwner, PDF_CHUNK_SIZE, PROTECTED_PDF_CHUNKS, PROTECTED_PDF_META_DOC, type AppSettings } from "./access-control";
 import { firestore } from "./firebase-client";
 import { practiceSubjectNames, practiceSubjectOrder, type CustomPracticeQuestion } from "./practice-library";
+import type { WritingMaterial, WritingMaterialKind } from "./writing-materials";
 
 type DirectoryUser = { uid: string; email: string; displayName?: string; photoURL?: string; lastSeenAt?: { toDate?: () => Date } };
 type UserMetrics = { lessons: number; stages: number; questions: number; openTasks: number; updatedAt?: { toDate?: () => Date } };
 type AdminTab = "overview" | "users" | "content" | "settings";
 type AuditEntry = { id: string; action: string; detail: string; createdAt?: { toDate?: () => Date } };
 type QuestionDraft = { subject: string; prompt: string; options: string; correct: number; explanation: string; written: boolean };
+type WritingDraft = { kind: WritingMaterialKind; title: string; description: string; body: string; source: string; score: string };
 type StoredStudentProfile = { uid: string; email: string; fullName?: string; displayName?: string; ra?: string; raDigit?: string };
 
 type Props = { user: User; onNotice: (message: string) => void };
 const emptyDraft: QuestionDraft = { subject: "portuguese", prompt: "", options: "\n\n\n", correct: 0, explanation: "", written: false };
+const emptyWritingDraft: WritingDraft = { kind: "prompt", title: "", description: "", body: "", source: "Material publicado pela Clareia", score: "" };
 
 function timestampLabel(value?: { toDate?: () => Date }) {
   const date = value?.toDate?.();
@@ -31,8 +34,10 @@ export default function AdminPanel({ user, onNotice }: Props) {
   const [blocked, setBlocked] = useState<Set<string>>(new Set());
   const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
   const [customQuestions, setCustomQuestions] = useState<CustomPracticeQuestion[]>([]);
+  const [writingMaterials, setWritingMaterials] = useState<WritingMaterial[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [draft, setDraft] = useState<QuestionDraft>(emptyDraft);
+  const [writingDraft, setWritingDraft] = useState<WritingDraft>(emptyWritingDraft);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,11 +53,11 @@ export default function AdminPanel({ user, onNotice }: Props) {
     if (!isOwner(user.email)) return;
     setLoading(true);
     try {
-      const [directorySnapshot, accessSnapshot, controlsSnapshot, profileSnapshot, settingsSnapshot, customSnapshot, auditSnapshot] = await Promise.all([
+      const [directorySnapshot, accessSnapshot, controlsSnapshot, profileSnapshot, settingsSnapshot, customSnapshot, writingSnapshot, auditSnapshot] = await Promise.all([
         getDocs(collection(firestore, "userDirectory")), getDocs(collection(firestore, "pdfAccess")),
         getDocs(collection(firestore, "userControls")),
         getDocs(collection(firestore, "studentProfiles")),
-        getDoc(doc(firestore, "appSettings", "main")), getDocs(collection(firestore, "customQuestions")), getDocs(query(collection(firestore, "adminAudit"), orderBy("createdAt", "desc"), limit(12))),
+        getDoc(doc(firestore, "appSettings", "main")), getDocs(collection(firestore, "customQuestions")), getDocs(collection(firestore, "writingMaterials")), getDocs(query(collection(firestore, "adminAudit"), orderBy("createdAt", "desc"), limit(12))),
       ]);
       const directory = directorySnapshot.docs.map((item) => ({ uid: item.id, ...item.data() } as DirectoryUser)).sort((a, b) => a.email.localeCompare(b.email));
       setUsers(directory);
@@ -61,6 +66,7 @@ export default function AdminPanel({ user, onNotice }: Props) {
       setStudentProfiles(Object.fromEntries(profileSnapshot.docs.map((item) => [item.id, { uid: item.id, ...item.data() } as StoredStudentProfile])));
       if (settingsSnapshot.exists()) setSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);
       setCustomQuestions(customSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as CustomPracticeQuestion)));
+      setWritingMaterials(writingSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as WritingMaterial)));
       setAudit(auditSnapshot.docs.map((item) => ({ id: item.id, ...item.data() } as AuditEntry)));
       const dashboardRows = await Promise.all(directory.map(async (person) => {
         const snapshot = await getDoc(doc(firestore, "users", person.uid, "dashboard", "main"));
@@ -133,6 +139,24 @@ export default function AdminPanel({ user, onNotice }: Props) {
     catch { onNotice("Não consegui excluir essa questão."); }
   }
 
+  async function createWritingMaterial() {
+    if (!writingDraft.title.trim() || !writingDraft.description.trim() || !writingDraft.body.trim() || !writingDraft.source.trim()) return onNotice("Preencha título, resumo, conteúdo e fonte do material de redação.");
+    setSaving(true);
+    try {
+      const id = `writing-${Date.now()}`;
+      const material: WritingMaterial = { id, kind: writingDraft.kind, title: writingDraft.title.trim(), description: writingDraft.description.trim(), body: writingDraft.body.trim(), source: writingDraft.source.trim(), ...(writingDraft.kind === "model" && writingDraft.score ? { score: Math.min(1000, Number(writingDraft.score)) } : {}) };
+      await setDoc(doc(firestore, "writingMaterials", id), { ...material, createdAt: serverTimestamp(), createdBy: user.email });
+      setWritingMaterials((current) => [material, ...current]); setWritingDraft(emptyWritingDraft); await logAction(material.kind === "prompt" ? "Proposta de redação criada" : "Redação de apoio criada", material.title); onNotice("Material de redação publicado para todos.");
+    } catch { onNotice("Não consegui publicar o material. Envie também a nova regra do Firestore."); }
+    finally { setSaving(false); }
+  }
+
+  async function removeWritingMaterial(material: WritingMaterial) {
+    if (!window.confirm(`Excluir “${material.title}” da área de Redação?`)) return;
+    try { await deleteDoc(doc(firestore, "writingMaterials", material.id)); setWritingMaterials((current) => current.filter((item) => item.id !== material.id)); await logAction("Material de redação excluído", material.title); onNotice("Material removido da área de Redação."); }
+    catch { onNotice("Não consegui excluir esse material."); }
+  }
+
   async function uploadPdf(file?: File) {
     if (!file) return; if (file.size < 1024) return onNotice("O arquivo está vazio ou incompleto."); if (file.size > 25 * 1024 * 1024) return onNotice("Use um PDF compacto de até 25 MB.");
     setUploading(true); setUploadProgress(0);
@@ -178,6 +202,8 @@ export default function AdminPanel({ user, onNotice }: Props) {
     </section>}
 
     {tab === "content" && <><section className="admin-grid"><article className="admin-card pdf-admin-card"><div className="admin-card-head"><span className="admin-card-icon">PDF</span><div><span className="eyebrow">MATERIAL PROTEGIDO</span><h3>Caderno SAME</h3></div></div><p>{pdfInfo}</p><label className={`upload-button ${uploading ? "disabled" : ""}`}><input type="file" accept="application/pdf" disabled={uploading} onChange={(event) => void uploadPdf(event.target.files?.[0])} /><span>{uploading ? `Enviando… ${uploadProgress}%` : "Enviar ou substituir PDF"}</span></label><small>Continua gratuito: o arquivo fica dividido em partes no Firestore, fora do GitHub e da Vercel.</small></article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">+Q</span><div><span className="eyebrow">EDITOR DE QUESTÕES</span><h3>Publicar nova questão</h3></div></div><div className="question-editor"><label>Matéria<select value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })}>{practiceSubjectOrder.map((id) => <option value={id} key={id}>{practiceSubjectNames[id]}</option>)}</select></label><label>Enunciado<textarea maxLength={1200} value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} placeholder="Digite a pergunta…" /></label><label className="inline-check"><input type="checkbox" checked={draft.written} onChange={(event) => setDraft({ ...draft, written: event.target.checked })} /> Resposta escrita</label>{!draft.written && <><label>Alternativas (uma por linha)<textarea maxLength={1600} value={draft.options} onChange={(event) => setDraft({ ...draft, options: event.target.value })} placeholder={"Alternativa A\nAlternativa B\nAlternativa C\nAlternativa D"} /></label><label>Alternativa correta<select value={draft.correct} onChange={(event) => setDraft({ ...draft, correct: Number(event.target.value) })}>{[0,1,2,3,4].map((value) => <option value={value} key={value}>{String.fromCharCode(65 + value)}</option>)}</select></label></>}<label>Correção / explicação<textarea maxLength={1600} value={draft.explanation} onChange={(event) => setDraft({ ...draft, explanation: event.target.value })} placeholder="Explique por que essa é a resposta…" /></label><button className="primary" disabled={saving} onClick={() => void createQuestion()}>Publicar para todos</button></div></article></section><section className="section-block"><div className="section-heading"><div><span className="eyebrow">CONTEÚDO CRIADO NO ADM</span><h2>{customQuestions.length} questões personalizadas</h2></div></div><div className="custom-question-list">{customQuestions.map((question) => <article key={question.id}><span>{practiceSubjectNames[question.subject]}</span><strong>{question.prompt}</strong><small>{question.written ? "Resposta escrita" : `${question.options?.length ?? 0} alternativas`}</small><button onClick={() => void removeQuestion(question)}>Excluir</button></article>)}{!customQuestions.length && <div className="question-empty"><strong>Nenhuma personalizada ainda.</strong><p>As 55 questões incluídas no código já estão publicadas.</p></div>}</div></section></>}
+
+    {tab === "content" && <section className="section-block writing-admin"><div className="section-heading"><div><span className="eyebrow">REDAÇÃO · CONTEÚDO DO ADM</span><h2>Propostas e redações de apoio</h2></div><span className="muted">{writingMaterials.length} publicados pelo ADM</span></div><div className="writing-admin-layout"><div className="question-editor writing-material-editor"><label>Tipo de conteúdo<select value={writingDraft.kind} onChange={(event) => setWritingDraft({ ...writingDraft, kind: event.target.value as WritingMaterialKind, score: event.target.value === "prompt" ? "" : writingDraft.score })}><option value="prompt">Proposta + textos de apoio</option><option value="model">Redação-modelo / redação de apoio</option></select></label><label>{writingDraft.kind === "prompt" ? "Tema da proposta" : "Título do modelo"}<input maxLength={180} value={writingDraft.title} onChange={(event) => setWritingDraft({ ...writingDraft, title: event.target.value })} placeholder={writingDraft.kind === "prompt" ? "Ex.: desafios da mobilidade urbana" : "Ex.: modelo comentado sobre mobilidade"} /></label><label>Resumo para o estudante<textarea maxLength={600} value={writingDraft.description} onChange={(event) => setWritingDraft({ ...writingDraft, description: event.target.value })} placeholder="Explique o foco do material e como ele deve ser usado." /></label><label>{writingDraft.kind === "prompt" ? "Coletânea e comando" : "Texto completo e comentários"}<textarea className="writing-admin-body" maxLength={12000} value={writingDraft.body} onChange={(event) => setWritingDraft({ ...writingDraft, body: event.target.value })} placeholder={writingDraft.kind === "prompt" ? "TEXTO I…\n\nTEXTO II…\n\nPROPOSTA…" : "[INTRODUÇÃO]\n…\n\n[DESENVOLVIMENTO 1]\n…"} /></label><div className="form-grid"><label>Fonte / identificação<input maxLength={180} value={writingDraft.source} onChange={(event) => setWritingDraft({ ...writingDraft, source: event.target.value })} /></label>{writingDraft.kind === "model" && <label>Nota de referência (opcional)<input inputMode="numeric" value={writingDraft.score} onChange={(event) => { const value = event.target.value.replace(/\D/g, "").slice(0, 4); setWritingDraft({ ...writingDraft, score: value ? String(Math.min(1000, Number(value))) : "" }); }} placeholder="0–1000" /></label>}</div><button className="primary" disabled={saving} onClick={() => void createWritingMaterial()}>Publicar na área de Redação</button></div><div className="writing-admin-list">{writingMaterials.map((material) => <article key={material.id}><span>{material.kind === "prompt" ? "PROPOSTA" : "REDAÇÃO DE APOIO"}</span><strong>{material.title}</strong><p>{material.description}</p><small>{material.source}{material.score ? ` · ${material.score} pontos` : ""}</small><button onClick={() => void removeWritingMaterial(material)}>Excluir</button></article>)}{!writingMaterials.length && <div className="question-empty"><strong>Nenhum material do ADM ainda.</strong><p>As propostas autorais incluídas no código continuam aparecendo para os estudantes.</p></div>}</div></div></section>}
 
     {tab === "settings" && <section className="admin-grid"><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">⚙</span><div><span className="eyebrow">FUNCIONAMENTO</span><h3>Controles gerais</h3></div></div>{([{ key: "assessmentsEnabled", title: "Check antes de concluir", detail: "Exige resposta nas aulas e no estágio Domínio." }, { key: "publicPracticeEnabled", title: "Prática ENEM ativa", detail: "Exibe o banco geral de questões da preparação." }, { key: "pdfEnabled", title: "Caderno protegido ativo", detail: "Permite abrir o material para usuários autorizados." }, { key: "maintenanceMode", title: "Modo manutenção", detail: "Bloqueia temporariamente o painel para todos, menos você." }] as const).map((item) => <label className="admin-toggle" key={item.key}><div><strong>{item.title}</strong><small>{item.detail}</small></div><input type="checkbox" checked={settings[item.key]} onChange={(event) => void saveSettings({ ...settings, [item.key]: event.target.checked })} /></label>)}</article><article className="admin-card"><div className="admin-card-head"><span className="admin-card-icon">MSG</span><div><span className="eyebrow">COMUNICAÇÃO</span><h3>Aviso e meta diária</h3></div></div><div className="question-editor"><label className="inline-check"><input type="checkbox" checked={settings.announcementEnabled} onChange={(event) => setSettings({ ...settings, announcementEnabled: event.target.checked })} /> Mostrar aviso para todos</label><label>Mensagem<textarea maxLength={500} value={settings.announcement} onChange={(event) => setSettings({ ...settings, announcement: event.target.value })} placeholder="Ex.: Simulado novo disponível sábado." /></label><label>Meta diária de questões<input type="number" min="1" max="100" value={settings.dailyQuestionGoal} onChange={(event) => setSettings({ ...settings, dailyQuestionGoal: Math.max(1, Math.min(100, Number(event.target.value) || 1)) })} /></label><button className="primary" disabled={saving} onClick={() => void saveSettings(settings)}>Salvar e publicar</button></div></article></section>}
 

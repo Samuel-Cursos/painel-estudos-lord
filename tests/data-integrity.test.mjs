@@ -60,6 +60,27 @@ test("as 24 aulas de Inglês têm conteúdo interno e check de domínio", async 
   }
 });
 
+test("a biblioteca oficial cobre todas as edições de 1998 a 2025", async () => {
+  const source = await read("app/enem-exam-library.tsx");
+  assert.match(source, /length: 28/);
+  assert.match(source, /2025 - index/);
+  assert.match(source, /provas-e-gabaritos/);
+  assert.match(source, /questionEnd = modernFormat \? \(effectiveDay === 1 \? 90 : 180\) : 63/);
+  assert.match(source, /onAnswerSheetsPersist/);
+});
+
+test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async () => {
+  const [studio, materials, admin, rules] = await Promise.all([read("app/writing-studio.tsx"), read("app/writing-materials.ts"), read("app/admin-panel.tsx"), read("firestore.rules")]);
+  assert.equal((materials.match(/kind: "prompt"/g) ?? []).length, 3);
+  assert.equal((materials.match(/kind: "model"/g) ?? []).length, 1);
+  assert.match(studio, /clareia-writing-draft-/);
+  assert.match(studio, /Projeto de texto/i);
+  assert.match(studio, /Editor de produção/i);
+  assert.match(admin, /createWritingMaterial/);
+  assert.match(rules, /match \/writingMaterials\/\{materialId\}/);
+  assert.match(rules, /'examAnswerSheets'/);
+});
+
 test("a regra de RA aceita o formato usado pelo cadastro", async () => {
   const rules = await read("firestore.rules");
   assert.match(rules, /raKey\.matches\('\^\[0-9\]\{5,20\}-\[0-9A-Z\]\{1,2\}\$'\)/);

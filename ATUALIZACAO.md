@@ -19,7 +19,7 @@ npm.cmd run dev
 
 ## 2. Publicar as regras do Firebase
 
-Esta etapa é obrigatória quando `firestore.rules` muda. As regras protegem perfis, RA, progresso, permissões do PDF, configurações e ADM.
+Esta etapa é obrigatória quando `firestore.rules` muda. As regras protegem perfis, RA, progresso, folhas de respostas, materiais de Redação, permissões do PDF, configurações e ADM.
 
 ```powershell
 npx.cmd firebase-tools login
@@ -43,7 +43,7 @@ Dentro da pasta do projeto:
 
 ```powershell
 git add .
-git commit -m "Aprofunda Clareia e corrige fluxos criticos"
+git commit -m "Adiciona provas oficiais e novo estudio de redacao"
 git push origin main
 ```
 
@@ -54,7 +54,10 @@ Se aparecer `nothing to commit`, execute apenas o `git push`. A Vercel inicia o 
 Espere o deploy ficar **Ready** e confira:
 
 - entrada com Google e cadastro de um perfil novo;
-- Início, Plano ENEM, Questões, Redação, Inglês e Agenda;
+- biblioteca oficial de provas de 1998 a 2025, folha de respostas e resultado;
+- Redação, textos de apoio, projeto de texto, editor e rascunho;
+- publicação de propostas e redações-modelo pelo ADM;
+- Início, Plano ENEM, Questões, Inglês e Agenda;
 - carregamento textual das 1.000 questões;
 - PDF em uma conta liberada pelo ADM;
 - Central ADM, configurações e histórico;

@@ -40,10 +40,11 @@ service cloud.firestore {
     function validDashboard(userId) {
       return signedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['progress', 'skillProgress', 'assessmentResults', 'questionProgress', 'tasks', 'essays', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['progress', 'skillProgress', 'assessmentResults', 'examAnswerSheets', 'questionProgress', 'tasks', 'essays', 'updatedAt'])
         && request.resource.data.get('progress', {}) is map
         && request.resource.data.get('skillProgress', {}) is map
         && request.resource.data.get('assessmentResults', {}) is map
+        && request.resource.data.get('examAnswerSheets', {}) is map
         && request.resource.data.get('questionProgress', {}) is map
         && request.resource.data.get('tasks', []) is list
         && request.resource.data.get('essays', []) is list;
@@ -107,6 +108,11 @@ service cloud.firestore {
     }
 
     match /customQuestions/{questionId} {
+      allow read: if true;
+      allow create, update, delete: if isOwner();
+    }
+
+    match /writingMaterials/{materialId} {
       allow read: if true;
       allow create, update, delete: if isOwner();
     }

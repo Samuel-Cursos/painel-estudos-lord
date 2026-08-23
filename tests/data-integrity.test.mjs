@@ -114,8 +114,15 @@ test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async (
   assert.match(rules, /'examAnswerSheets'/);
 });
 
-test("a regra de RA aceita o formato usado pelo cadastro", async () => {
-  const rules = await read("firestore.rules");
+test("o cadastro valida RA sem bloquear contas diferentes globalmente", async () => {
+  const [rules, setup, dashboard, profile] = await Promise.all([read("firestore.rules"), read("app/student-profile-setup.tsx"), read("app/study-dashboard.tsx"), read("app/student-profile.ts")]);
   assert.match(rules, /raKey\.matches\('\^\[0-9\]\{5,20\}-\[0-9A-Z\]\{1,2\}\$'\)/);
   assert.doesNotMatch(rules, /raKey\.matches\('\^\[0-9\]\{5,20\}\$'\)/);
+  assert.doesNotMatch(setup, /studentRaRegistry/);
+  assert.doesNotMatch(rules, /getAfter\([^\n]*studentRaRegistry/);
+  assert.match(rules, /match \/studentRaRegistry\/\{raKey\}[\s\S]*allow read, create, update, delete: if isOwner\(\);/);
+  assert.match(profile, /clareia-student-profile-/);
+  assert.match(setup, /studentProfileStorageKey\(user\.uid\)/);
+  assert.match(dashboard, /studentProfileStorageKey\(currentUser\.uid\)/);
+  assert.match(setup, /finally[\s\S]*onComplete\(profile\)/);
 });

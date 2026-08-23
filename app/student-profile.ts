@@ -21,6 +21,10 @@ export function makeRaKey(ra: string, digit: string) {
   return `${normalizeRa(ra)}-${normalizeRaDigit(digit)}`;
 }
 
+export function studentProfileStorageKey(uid: string) {
+  return `clareia-student-profile-${uid}`;
+}
+
 export function isCompleteStudentProfile(value: unknown): value is StudentProfile {
   if (!value || typeof value !== "object") return false;
   const profile = value as Partial<StudentProfile>;

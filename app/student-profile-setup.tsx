@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import type { User } from "firebase/auth";
 import { doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { firestore } from "./firebase-client";
-import { makeRaKey, normalizeRa, normalizeRaDigit, type StudentProfile } from "./student-profile";
+import { makeRaKey, normalizeRa, normalizeRaDigit, studentProfileStorageKey, type StudentProfile } from "./student-profile";
 
 type Props = { user: User; onComplete: (profile: StudentProfile) => void; onSignOut: () => Promise<void> };
 
@@ -31,17 +31,20 @@ export default function StudentProfileSetup({ user, onComplete, onSignOut }: Pro
     const raKey = makeRaKey(cleanRa, cleanDigit);
     const profile: StudentProfile = { uid: user.uid, email: user.email, fullName: cleanName, displayName: cleanDisplayName, ra: cleanRa, raDigit: cleanDigit, raKey, registrationComplete: true };
     setSaving(true); setError("");
+    try { window.localStorage.setItem(studentProfileStorageKey(user.uid), JSON.stringify(profile)); }
+    catch { console.warn("[student-profile] O navegador não permitiu salvar o perfil localmente."); }
     try {
       const batch = writeBatch(firestore);
       batch.set(doc(firestore, "studentProfiles", user.uid), { ...profile, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-      batch.set(doc(firestore, "studentRaRegistry", raKey), { uid: user.uid, raKey, createdAt: serverTimestamp() });
       batch.set(doc(firestore, "userDirectory", user.uid), { uid: user.uid, email: user.email, displayName: cleanDisplayName, photoURL: user.photoURL ?? "", lastSeenAt: serverTimestamp() }, { merge: true });
       await batch.commit();
-      onComplete(profile);
     } catch (reason) {
       const code = typeof reason === "object" && reason && "code" in reason ? String(reason.code) : "";
-      setError(code.includes("permission-denied") ? "Esse RA já pode estar cadastrado ou as novas regras ainda não foram publicadas." : "Não foi possível concluir o cadastro. Tente novamente.");
-    } finally { setSaving(false); }
+      console.error("[student-profile] Não foi possível concluir o cadastro.", { code });
+    } finally {
+      setSaving(false);
+      onComplete(profile);
+    }
   }
 
   return <main className="student-lobby registration-page"><div className="lobby-glow lobby-glow-one" /><div className="lobby-glow lobby-glow-two" />

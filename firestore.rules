@@ -33,8 +33,7 @@ service cloud.firestore {
         && request.resource.data.raKey.matches('^[0-9]{5,20}-[0-9A-Z]{1,2}$')
         && request.resource.data.raKey == request.resource.data.ra + '-' + request.resource.data.raDigit
         && request.resource.data.raDigit is string
-        && request.resource.data.raDigit.matches('^[0-9A-Z]{1,2}$')
-        && getAfter(/databases/$(database)/documents/studentRaRegistry/$(request.resource.data.raKey)).data.uid == request.auth.uid;
+        && request.resource.data.raDigit.matches('^[0-9A-Z]{1,2}$');
     }
 
     function validDashboard(userId) {
@@ -78,18 +77,7 @@ service cloud.firestore {
     }
 
     match /studentRaRegistry/{raKey} {
-      allow get: if isOwner() || (signedIn() && resource.data.uid == request.auth.uid);
-      allow list: if isOwner();
-      allow create: if isOwner() || (signedIn()
-        && !exists(/databases/$(database)/documents/studentRaRegistry/$(raKey))
-        && request.resource.data.keys().hasOnly(['uid', 'raKey', 'createdAt'])
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.raKey == raKey
-        && raKey.matches('^[0-9]{5,20}-[0-9A-Z]{1,2}$')
-        && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.registrationComplete == true
-        && getAfter(/databases/$(database)/documents/studentProfiles/$(request.auth.uid)).data.raKey == raKey);
-      allow update: if isOwner();
-      allow delete: if isOwner();
+      allow read, create, update, delete: if isOwner();
     }
 
     match /pdfAccess/{userId} {

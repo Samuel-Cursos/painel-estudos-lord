@@ -15,7 +15,7 @@ import { englishLessonContent } from "./english-lesson-content";
 import { defaultAppSettings, isOwner, type AppSettings } from "./access-control";
 import StudentLobby from "./student-lobby";
 import StudentProfileSetup from "./student-profile-setup";
-import { isCompleteStudentProfile, type StudentProfile } from "./student-profile";
+import { isCompleteStudentProfile, studentProfileStorageKey, type StudentProfile } from "./student-profile";
 import type { AssessmentMap, AssessmentRecord, ExamAnswerSheetMap } from "./enem-exam-library";
 import type { EssayRecord } from "./writing-studio";
 
@@ -135,8 +135,22 @@ export default function StudyDashboard() {
         getDoc(doc(firestore, "pdfAccess", currentUser.uid)), getDoc(doc(firestore, "userControls", currentUser.uid)),
         getDoc(doc(firestore, "appSettings", "main")), getDoc(doc(firestore, "users", currentUser.uid, "dashboard", "main")), getDoc(doc(firestore, "studentProfiles", currentUser.uid)),
       ]);
-      const storedProfile = profileSnapshot.exists() ? profileSnapshot.data() : null;
-      if (isCompleteStudentProfile(storedProfile)) setStudentProfile(storedProfile);
+      let storedProfile = profileSnapshot.exists() ? profileSnapshot.data() : null;
+      if (!isCompleteStudentProfile(storedProfile)) {
+        try {
+          const localProfile = JSON.parse(window.localStorage.getItem(studentProfileStorageKey(currentUser.uid)) ?? "null");
+          if (isCompleteStudentProfile(localProfile) && localProfile.uid === currentUser.uid && localProfile.email === currentUser.email) storedProfile = localProfile;
+        } catch { console.warn("[student-profile] O perfil local não pôde ser lido."); }
+      }
+      if (isCompleteStudentProfile(storedProfile)) {
+        setStudentProfile(storedProfile);
+        try { window.localStorage.setItem(studentProfileStorageKey(currentUser.uid), JSON.stringify(storedProfile)); }
+        catch { console.warn("[student-profile] O perfil não pôde ser guardado neste navegador."); }
+        if (!profileSnapshot.exists()) {
+          void setDoc(doc(firestore, "studentProfiles", currentUser.uid), { ...storedProfile, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+            .catch((reason) => console.warn("[student-profile] A cópia na nuvem será tentada novamente no próximo acesso.", { code: reason?.code ?? "unknown" }));
+        }
+      }
       setPdfAllowed(isOwner(currentUser.email) || (accessSnapshot.exists() && accessSnapshot.data().enabled === true));
       setSiteBlocked(!isOwner(currentUser.email) && controlsSnapshot.exists() && controlsSnapshot.data().siteEnabled === false);
       if (settingsSnapshot.exists()) setAppSettings({ ...defaultAppSettings, ...settingsSnapshot.data() } as AppSettings);

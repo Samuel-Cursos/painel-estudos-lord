@@ -7,7 +7,7 @@ const isVercel = process.env.VERCEL === "1";
 
 if (!isVercel) rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
 
-for (const script of ["scripts/audit-question-answer-key.mjs", "scripts/inspect-ppl-answer-key.mjs"]) {
+for (const script of ["scripts/audit-question-answer-key.mjs", "scripts/inspect-ppl-web.mjs"]) {
   const check = spawnSync(process.execPath, [script], {
     cwd: process.cwd(),
     env: process.env,

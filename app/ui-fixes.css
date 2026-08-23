@@ -1,28 +1,4 @@
-/* Correções pontuais de UX sem alterar a identidade visual da Clareia. */
-
-/* Avisos rápidos: ficam visíveis o suficiente para leitura e somem sozinhos. */
-.notice {
-  animation: clareia-notice-auto-hide 1.8s ease forwards !important;
-}
-
-@keyframes clareia-notice-auto-hide {
-  0%, 72% {
-    opacity: 1;
-    transform: translateY(0);
-    visibility: visible;
-  }
-  99% {
-    opacity: 0;
-    transform: translateY(-8px);
-    visibility: visible;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-8px);
-    visibility: hidden;
-    pointer-events: none;
-  }
-}
+/* Correções focadas somente na experiência das atividades/questões. */
 
 /*
  * Depois da correção, não deixe a alternativa continuar dizendo apenas

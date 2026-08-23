@@ -54,8 +54,8 @@ Se aparecer `nothing to commit`, execute apenas o `git push`. A Vercel inicia o 
 Espere o deploy ficar **Ready** e confira:
 
 - entrada com Google e cadastro de um perfil novo;
-- biblioteca oficial de provas de 1998 a 2025, folha de respostas e resultado;
-- Modo Prova 2011–2019 com caderno amarelo na tela, cronômetro, cartão-resposta e correção automática por área;
+- Modo Prova completo de 2009 a 2025, com 180 questões contínuas dentro da Clareia;
+- correção imediata pelo gabarito oficial, cronômetro, retomada, mapa de pendentes e resultado por área;
 - Redação, textos de apoio, projeto de texto, editor e rascunho;
 - publicação de propostas e redações-modelo pelo ADM;
 - Início, Plano ENEM, Questões, Inglês e Agenda;

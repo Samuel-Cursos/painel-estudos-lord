@@ -8,8 +8,8 @@ Plataforma de estudos focada em preparação para o ENEM e Inglês, com acesso G
 - Caderno SAME com 1.000 questões: 400 de Matemática e 600 de Ciências da Natureza.
 - Versão textual das 1.000 questões e visualização do PDF original para contas autorizadas.
 - Banco rápido com correção para Linguagens, Matemática, Inglês, Natureza e Humanas.
-- Biblioteca das 28 edições oficiais do ENEM, de 1998 a 2025, com acesso aos cadernos e gabaritos do INEP, folha de respostas sincronizada e registro de desempenho.
-- Modo Prova completo nas edições de 2011 a 2019: PDF oficial dentro da Clareia, cronômetro, escolha de Inglês/Espanhol, cartão-resposta, correção automática por área e revisão de erros.
+- Modo Prova completo nas 17 edições de 2009 a 2025: 3.060 questões dentro da Clareia, sem leitor de PDF e em uma sequência contínua de 180 questões.
+- Gabarito oficial, correção imediata, mapa de pendentes, cronômetro, retomada sincronizada, resultado por área e revisão de erros.
 - Estúdio de Redação com propostas, coletâneas, projeto de texto, editor, rascunho automático, correção e histórico.
 - Trilha introdutória de Inglês A1–A2 com 24 aulas dentro da plataforma, vocabulário, exemplos, prática e check de domínio.
 - Agenda pessoal com prazos, ordenação e aviso de atraso.

@@ -1,0 +1,108 @@
+{
+  "updatedAt": "2026-08-23",
+  "officialArchive": "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem/provas-e-gabaritos",
+  "years": [
+    {
+      "year": 2025,
+      "total": 180,
+      "cancelled": 3,
+      "available": true
+    },
+    {
+      "year": 2024,
+      "total": 180,
+      "cancelled": 1,
+      "available": true
+    },
+    {
+      "year": 2023,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2022,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2021,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2020,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2019,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2018,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2017,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2016,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2015,
+      "total": 180,
+      "cancelled": 1,
+      "available": true
+    },
+    {
+      "year": 2014,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2013,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2012,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2011,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2010,
+      "total": 180,
+      "cancelled": 0,
+      "available": true
+    },
+    {
+      "year": 2009,
+      "total": 180,
+      "cancelled": 1,
+      "available": true
+    }
+  ]
+}

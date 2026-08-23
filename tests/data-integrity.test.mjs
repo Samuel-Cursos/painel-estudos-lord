@@ -60,31 +60,46 @@ test("as 24 aulas de Inglês têm conteúdo interno e check de domínio", async 
   }
 });
 
-test("a biblioteca oficial cobre todas as edições de 1998 a 2025", async () => {
-  const source = await read("app/enem-exam-library.tsx");
-  assert.match(source, /length: 28/);
-  assert.match(source, /2025 - index/);
-  assert.match(source, /provas-e-gabaritos/);
-  assert.match(source, /questionEnd = modernFormat \? \(effectiveDay === 1 \? 90 : 180\) : 63/);
-  assert.match(source, /onAnswerSheetsPersist/);
+test("as provas internas cobrem 2009 a 2025 com 180 questões válidas", async () => {
+  const manifest = JSON.parse(await read("public/enem-exams/manifest.json"));
+  assert.deepEqual(manifest.years.map((item) => item.year), Array.from({ length: 17 }, (_, index) => 2025 - index));
+  assert.equal(manifest.years.reduce((sum, item) => sum + item.total, 0), 3060);
+
+  for (const { year } of manifest.years) {
+    const exam = JSON.parse(await read(`public/enem-exams/${year}.json`));
+    assert.equal(exam.questions.length, 180, `${year} sem 180 questões`);
+    assert.deepEqual(exam.questions.map((question) => question.index), Array.from({ length: 180 }, (_, index) => index + 1));
+    assert.deepEqual(Object.fromEntries(Object.entries(Object.groupBy(exam.questions, (question) => question.area)).map(([area, items]) => [area, items.length])), { lc: 45, ch: 45, cn: 45, math: 45 });
+    for (const question of exam.questions) {
+      assert.equal(question.alternatives.length, 5, `${year}/${question.index} sem cinco alternativas`);
+      assert.ok(question.alternatives.every((alternative) => alternative.letter && (alternative.text || alternative.file)), `${year}/${question.index} com alternativa vazia`);
+      assert.ok(question.cancelled || /^[A-E]$/.test(question.correctAlternative), `${year}/${question.index} sem gabarito`);
+      assert.ok(question.cancelled || question.context || question.statement || question.files.length || question.previewImage, `${year}/${question.index} sem enunciado`);
+    }
+  }
 });
 
-test("o Modo Prova usa nove gabaritos oficiais completos", async () => {
-  const [data, simulator, library] = await Promise.all([
-    read("app/enem-official-simulations.ts"),
+test("o Modo Prova é interno, contínuo e retomável", async () => {
+  const [simulator, library, examData, bank] = await Promise.all([
     read("app/official-exam-simulator.tsx"),
     read("app/enem-exam-library.tsx"),
+    read("app/enem-exam-data.ts"),
+    read("app/question-bank.tsx"),
   ]);
-  const years = [...data.matchAll(/^\s{2}(20\d{2}): \{/gm)].map((match) => Number(match[1]));
-  const keys = [...data.matchAll(/answerKey: "([A-E]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(years, [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]);
-  assert.equal(keys.length, 9);
-  assert.ok(keys.every((key) => key.length === 180));
-  assert.equal((data.match(/bookletUrls:/g) ?? []).length, 10);
-  assert.match(simulator, /Finalizar dia e ver resultado/);
-  assert.match(simulator, /officialAnswerFor/);
-  assert.match(simulator, /A nota oficial do ENEM usa a TRI/);
-  assert.match(library, /onAssessmentResult/);
+  assert.match(simulator, /fetch\(`\/enem-exams\/\$\{year\}\.json`\)/);
+  assert.match(simulator, /QUESTÃO \{question\.index\} DE 180/);
+  assert.match(simulator, /currentQuestion/);
+  assert.match(simulator, /Finalizar prova e ver resultado/);
+  assert.match(simulator, /resposta correta é/);
+  assert.doesNotMatch(simulator, /<iframe/);
+  assert.doesNotMatch(simulator, /day: 1 \| 2/);
+  assert.match(examData, /Array\.from\(\{ length: 17 \}/);
+  assert.match(library, /officialExamYears/);
+  assert.match(library, /3\.060/);
+  assert.match(bank, /useState<BankMode>\("main"\)/);
+  assert.match(bank, /Banco principal/);
+  assert.match(bank, /Questões rápidas/);
+  assert.match(bank, /bankMode === "main"/);
 });
 
 test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async () => {

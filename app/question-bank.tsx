@@ -41,6 +41,7 @@ type Props = {
 
 type PdfState = "loading" | "ready" | "error";
 type StatusFilter = "all" | "pending" | "answered" | "review";
+type BankMode = "main" | "quick";
 
 const subjectMeta: Record<QuestionSubject, { name: string; short: string; color: string; icon: string }> = {
   math: { name: "Matemática", short: "MAT", color: "#477ee8", icon: "∑" },
@@ -181,6 +182,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   const [pdfReloadKey, setPdfReloadKey] = useState(0);
   const [pdfError, setPdfError] = useState("");
   const [noteDraft, setNoteDraft] = useState(initialQuestion ? progress[initialQuestion.id]?.note ?? "" : "");
+  const [bankMode, setBankMode] = useState<BankMode>("main");
   const showSame = isOwner(user?.email) || isHighSchool(schoolYear);
 
   const chapters = useMemo(() => questionChapters.filter((chapter) => chapter.subject === subject), [subject]);
@@ -201,7 +203,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
   }, [chapterId, progress, search, status, subject]);
 
   useEffect(() => {
-    if (!showSame || !user || !pdfAllowed || !pdfEnabled) {
+    if (bankMode !== "main" || !showSame || !user || !pdfAllowed || !pdfEnabled) {
       return;
     }
     let active = true;
@@ -252,7 +254,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
     }
     void loadProtectedPdf();
     return () => { active = false; window.clearTimeout(loadingTimer); if (document) void document.destroy(); };
-  }, [onNotice, pdfAllowed, pdfEnabled, pdfReloadKey, showSame, user]);
+  }, [bankMode, onNotice, pdfAllowed, pdfEnabled, pdfReloadKey, showSame, user]);
 
   function openQuestion(question: Question | null) {
     if (!question) return;
@@ -302,7 +304,12 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
       </div>
     </section>
 
-    <PracticeLibrary progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} enabled={publicPracticeEnabled} />
+    <nav className="question-mode-tabs" aria-label="Tipo de questões">
+      <button className={bankMode === "main" ? "active" : ""} onClick={() => setBankMode("main")}><span>1.000</span><div><strong>Banco principal</strong><small>Matemática, Biologia, Química e Física</small></div></button>
+      <button className={bankMode === "quick" ? "active" : ""} onClick={() => setBankMode("quick")}><span>⚡</span><div><strong>Questões rápidas</strong><small>Treinos curtos com correção imediata</small></div></button>
+    </nav>
+
+    {bankMode === "main" ? <>
 
     {!pdfAllowed && <section className="access-mode-banner"><span>TXT</span><div><strong>Você está usando a versão em texto</strong><p>As 1.000 questões ficam disponíveis na sua conta. O PDF original aparece apenas para o dono e usuários liberados pelo ADM.</p></div></section>}
     {pdfAllowed && !pdfEnabled && <section className="access-mode-banner"><span>OFF</span><div><strong>PDF pausado pelo ADM</strong><p>As questões continuam disponíveis em texto.</p></div></section>}
@@ -342,6 +349,7 @@ export default function QuestionBank({ schoolYear, progress, focus, user, pdfAll
       </div>
       <footer className="question-modal-actions"><button className="secondary" onClick={() => setActiveQuestion(null)}>Voltar ao caderno</button><div><span>{activeAttempt.answer || activeAttempt.note?.trim() ? "Resposta registrada" : "Ainda não respondida"}</span><button className="primary" onClick={nextQuestion}>Próxima do assunto →</button></div></footer>
     </section></div>}
+    </> : <PracticeLibrary progress={progress} onProgressChange={onProgressChange} onNotice={onNotice} enabled={publicPracticeEnabled} />}
     </div> : <section className="same-locked-by-grade"><span>ENEM</span><div><strong>O caderno SAME aparece no Ensino Médio</strong><p>Você está no {yearLabel(schoolYear)}. Seu banco completo e o material adequado à sua série estão acima.</p></div></section>}
   </div>;
 }

@@ -49,9 +49,9 @@ export default function PracticeLibrary({ progress, onProgressChange, onNotice, 
     }
   }
 
-  if (!enabled) return <section className="access-mode-banner"><span>OFF</span><div><strong>Banco geral pausado pelo ADM</strong><p>O caderno SAME continua disponível logo abaixo.</p></div></section>;
+  if (!enabled) return <section className="access-mode-banner"><span>OFF</span><div><strong>Questões rápidas pausadas pelo ADM</strong><p>Volte à aba Banco principal para continuar nas 1.000 questões.</p></div></section>;
 
-  return <section className="practice-library"><div className="section-heading"><div><span className="eyebrow">BANCO GERAL · TODAS AS MATÉRIAS</span><h2>Questões rápidas com correção</h2><p>{allQuestions.length} questões organizadas em 11 matérias. O caderno SAME continua separado abaixo.</p></div><span className="practice-score">{completed}/{allQuestions.length} feitas</span></div>
+  return <section className="practice-library"><div className="section-heading"><div><span className="eyebrow">TREINO RÁPIDO · TODAS AS MATÉRIAS</span><h2>Questões rápidas com correção</h2><p>{allQuestions.length} questões curtas organizadas em 11 matérias, separadas do banco principal.</p></div><span className="practice-score">{completed}/{allQuestions.length} feitas</span></div>
     <div className="practice-filters"><button className={subject === "all" ? "active" : ""} onClick={() => setSubject("all")}>Todas <span>{allQuestions.length}</span></button>{practiceSubjectOrder.map((id) => <button key={id} className={subject === id ? "active" : ""} onClick={() => setSubject(id)}>{practiceSubjectNames[id]} <span>{allQuestions.filter((item) => item.subject === id).length}</span></button>)}</div>
     <div className="practice-question-grid">{filtered.map((question, index) => <button key={question.id} className={progress[question.id]?.answer || progress[question.id]?.note?.trim() ? "done" : ""} onClick={() => open(question)}><span>{progress[question.id]?.answer || progress[question.id]?.note?.trim() ? "✓" : String(index + 1).padStart(2, "0")}</span><div><small>{practiceSubjectNames[question.subject]}</small><strong>{question.prompt}</strong></div><b>→</b></button>)}</div>
 

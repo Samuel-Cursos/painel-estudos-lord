@@ -79,12 +79,13 @@ test("as provas internas cobrem 2009 a 2025 com 180 questões válidas", async (
   }
 });
 
-test("o Modo Prova é interno, contínuo e retomável", async () => {
-  const [simulator, library, examData, bank] = await Promise.all([
+test("o Modo Prova é interno, contínuo, retomável e responsivo", async () => {
+  const [simulator, library, examData, bank, styles] = await Promise.all([
     read("app/official-exam-simulator.tsx"),
     read("app/enem-exam-library.tsx"),
     read("app/enem-exam-data.ts"),
     read("app/question-bank.tsx"),
+    read("app/globals.css"),
   ]);
   assert.match(simulator, /fetch\(`\/enem-exams\/\$\{year\}\.json`\)/);
   assert.match(simulator, /QUESTÃO \{question\.index\} DE 180/);
@@ -100,6 +101,8 @@ test("o Modo Prova é interno, contínuo e retomável", async () => {
   assert.match(bank, /Banco principal/);
   assert.match(bank, /Questões rápidas/);
   assert.match(bank, /bankMode === "main"/);
+  assert.match(styles, /\.exam-library\{width:100%;max-width:100%;min-width:0/);
+  assert.match(styles, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test("Redação oferece propostas, editor, rascunho e conteúdo do ADM", async () => {

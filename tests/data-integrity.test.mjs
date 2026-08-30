@@ -108,9 +108,10 @@ test("as provas internas cobrem 2009 a 2025 com 180 questões válidas", async (
   }
 });
 
-test("o Modo Prova é interno, contínuo, retomável e responsivo", async () => {
-  const [simulator, library, examData, bank, styles] = await Promise.all([
+test("o Modo Prova é interno, contínuo, retomável, bloqueia respostas e diagnostica temas", async () => {
+  const [simulator, analysis, library, examData, bank, styles] = await Promise.all([
     read("app/official-exam-simulator.tsx"),
+    read("app/exam-analysis.ts"),
     read("app/enem-exam-library.tsx"),
     read("app/enem-exam-data.ts"),
     read("app/question-bank.tsx"),
@@ -121,6 +122,13 @@ test("o Modo Prova é interno, contínuo, retomável e responsivo", async () => 
   assert.match(simulator, /currentQuestion/);
   assert.match(simulator, /Finalizar prova e ver resultado/);
   assert.match(simulator, /resposta correta é/);
+  assert.match(simulator, /storedFinished \|\| chosen/);
+  assert.match(simulator, /disabled=\{Boolean\(chosen\) \|\| storedFinished\}/);
+  assert.match(simulator, /Resposta salva e bloqueada/);
+  assert.match(simulator, /BUSCA ATIVA DOS SEUS ERROS/);
+  assert.match(analysis, /classifyExamQuestion/);
+  assert.match(analysis, /focusPercent/);
+  assert.match(analysis, /wrongQuestions/);
   assert.doesNotMatch(simulator, /<iframe/);
   assert.doesNotMatch(simulator, /day: 1 \| 2/);
   assert.match(examData, /Array\.from\(\{ length: 17 \}/);

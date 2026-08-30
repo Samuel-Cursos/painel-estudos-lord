@@ -8,7 +8,6 @@ const isVercel = process.env.VERCEL === "1";
 if (!isVercel) rmSync(new URL("../dist", import.meta.url), { recursive: true, force: true });
 
 for (const script of [
-  "scripts/prepare-answer-key-generator.mjs",
   "scripts/build-question-answer-key.mjs",
   "scripts/audit-question-answer-key.mjs",
   "scripts/inspect-enem-dataset.mjs",

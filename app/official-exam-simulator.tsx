@@ -2,18 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { areaLabels, type EnemExamData, type EnemQuestionData, type ExamAreaId } from "./enem-exam-data";
+import { buildExamResult, type OfficialExamResult } from "./exam-analysis";
 
-export type OfficialAreaResult = { correct: number; wrong: number; blank: number; cancelled: number; total: number };
-export type OfficialExamResult = {
-  correct: number;
-  wrong: number;
-  blank: number;
-  cancelled: number;
-  total: number;
-  gradedTotal: number;
-  areas: Record<ExamAreaId, OfficialAreaResult>;
-  finishedAt: string;
-};
+export type { OfficialExamResult } from "./exam-analysis";
 
 export type SimulatorAnswerSheet = {
   answers: Record<string, string>;
@@ -43,35 +34,6 @@ function formatTimer(totalSeconds: number) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
-}
-
-function resultFor(exam: EnemExamData, answers: Record<string, string>): OfficialExamResult {
-  const areas = Object.fromEntries(areaIds.map((id) => [id, { correct: 0, wrong: 0, blank: 0, cancelled: 0, total: 0 }])) as Record<ExamAreaId, OfficialAreaResult>;
-  let correct = 0;
-  let wrong = 0;
-  let blank = 0;
-  let cancelled = 0;
-  for (const question of exam.questions) {
-    const area = areas[question.area];
-    area.total += 1;
-    if (question.cancelled) {
-      area.cancelled += 1;
-      cancelled += 1;
-    } else {
-      const answer = answers[String(question.index)];
-      if (!answer) {
-        area.blank += 1;
-        blank += 1;
-      } else if (answer === question.correctAlternative) {
-        area.correct += 1;
-        correct += 1;
-      } else {
-        area.wrong += 1;
-        wrong += 1;
-      }
-    }
-  }
-  return { correct, wrong, blank, cancelled, total: 180, gradedTotal: 180 - cancelled, areas, finishedAt: new Date().toISOString() };
 }
 
 function QuestionImage({ source, alt }: { source: string; alt: string }) {
@@ -183,11 +145,16 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
   const chosen = question ? localSheet.answers[String(question.index)] ?? "" : "";
   const feedback = question && chosen ? (chosen === question.correctAlternative ? "correct" : "wrong") : "";
   const areaGroups = useMemo(() => exam ? areaIds.map((id) => ({ id, questions: exam.questions.filter((item) => item.area === id) })) : [], [exam]);
+  const displayedResult = useMemo(() => {
+    if (!exam || !storedFinished) return localSheet.result;
+    if (localSheet.result?.topics) return localSheet.result;
+    return buildExamResult(exam, localSheet.answers, localSheet.result?.finishedAt);
+  }, [exam, localSheet.answers, localSheet.result, storedFinished]);
 
   function chooseAnswer(letter: string) {
-    if (!question || question.cancelled || storedFinished) return;
+    if (!question || question.cancelled || storedFinished || chosen) return;
     const answers = { ...localSheet.answers, [String(question.index)]: letter };
-    commit(snapshot({ answers, status: "in_progress", result: undefined }), Object.keys(answers).length % 10 === 0);
+    commit(snapshot({ answers, status: "in_progress", result: undefined }), true);
   }
 
   function goTo(index: number) {
@@ -205,7 +172,7 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
 
   function finishExam() {
     if (!exam) return;
-    const result = resultFor(exam, localSheet.answers);
+    const result = buildExamResult(exam, localSheet.answers);
     if (result.blank > 0 && !window.confirm(`Ainda há ${result.blank} questão(ões) sem resposta. Finalizar e corrigir mesmo assim?`)) return;
     setTimerRunning(false);
     const next = snapshot({ status: "finished", result });
@@ -230,8 +197,15 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
       </header>
 
       {loadError ? <div className="exam-load-state error"><strong>Esta prova não abriu.</strong><p>{loadError}</p><button className="primary" onClick={() => window.location.reload()}>Tentar novamente</button></div> : !exam || !question ? <div className="exam-load-state"><span className="exam-loader" /><strong>Preparando as 180 questões…</strong><p>Carregando enunciados, imagens e gabarito.</p></div> : finished ? <div className="simulator-result-screen">
-        <div className="simulator-result-summary"><span>RESULTADO AUTOMÁTICO</span><strong>{localSheet.result?.correct}<small>/{localSheet.result?.gradedTotal} acertos válidos</small></strong><p>{localSheet.result?.wrong} erros · {localSheet.result?.blank} em branco · {localSheet.result?.cancelled} anulada(s)</p></div>
-        <div className="simulator-area-results">{areaIds.map((id) => { const area = localSheet.result?.areas[id]; return <article key={id}><span>{areaLabels[id]}</span><strong>{area?.correct ?? 0}<small> acertos</small></strong><p>{area?.wrong ?? 0} erros · {area?.blank ?? 0} em branco{area?.cancelled ? ` · ${area.cancelled} anulada(s)` : ""}</p></article>; })}</div>
+        <div className="simulator-result-summary"><span>RESULTADO AUTOMÁTICO</span><strong>{displayedResult?.correct}<small>/{displayedResult?.gradedTotal} acertos válidos</small></strong><p>{displayedResult?.wrong} erros · {displayedResult?.blank} em branco · {displayedResult?.cancelled} anulada(s)</p></div>
+        <div className="simulator-area-results">{areaIds.map((id) => { const area = displayedResult?.areas[id]; return <article key={id}><span>{areaLabels[id]}</span><strong>{area?.correct ?? 0}<small> acertos</small></strong><p>{area?.wrong ?? 0} erros · {area?.blank ?? 0} em branco{area?.cancelled ? ` · ${area.cancelled} anulada(s)` : ""}</p></article>; })}</div>
+        <section className="exam-study-diagnosis" aria-labelledby="exam-diagnosis-title">
+          <div className="exam-diagnosis-head"><div><span>BUSCA ATIVA DOS SEUS ERROS</span><h3 id="exam-diagnosis-title">O que estudar primeiro</h3><p>A prioridade distribui 100% do seu próximo tempo de revisão entre os temas em que você errou. A taxa de erro considera somente as questões que você respondeu.</p></div><strong>{displayedResult?.topics.length ?? 0}<small> temas para revisar</small></strong></div>
+          {displayedResult?.topics.length ? <div className="exam-topic-results">{displayedResult.topics.map((topic, index) => <article key={topic.id}>
+            <div className="exam-topic-rank"><span>{String(index + 1).padStart(2, "0")}</span><b>{topic.focusPercent}%<small> do foco</small></b></div>
+            <div className="exam-topic-copy"><div><strong>{topic.topic}</strong><span>{areaLabels[topic.area]}</span></div><p>{topic.studyAction}</p><small>{topic.wrong} erro(s) em {topic.answered} respondida(s) neste tema · taxa de erro: {topic.errorRate}%</small><i aria-label={`${topic.focusPercent}% do foco de estudo`}><b style={{ width: `${topic.focusPercent}%` }} /></i><em>Questões para revisar: {topic.wrongQuestions.join(", ")}</em></div>
+          </article>)}</div> : <div className="exam-diagnosis-success"><strong>Nenhum tema fraco apareceu nas questões respondidas.</strong><p>{displayedResult?.blank ? "As questões deixadas em branco não entram no diagnóstico. Responda-as para receber uma análise completa." : "Você acertou todas as questões válidas desta tentativa. Continue revisando para manter o resultado."}</p></div>}
+        </section>
         <div className="simulator-result-actions"><button className="secondary" onClick={() => { setReviewing(true); setCurrent(1); }}>Revisar questões</button><button className="danger-outline" onClick={retryExam}>Refazer prova</button><button className="primary" onClick={close}>Salvar e sair</button></div>
         <p className="tri-notice"><strong>Importante:</strong> este resultado mostra acertos brutos pelo gabarito oficial. A nota oficial do ENEM usa a TRI e não pode ser calculada somente pela quantidade de acertos.</p>
       </div> : <>
@@ -251,8 +225,8 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
             {storedFinished && <div className="exam-review-banner"><strong>Modo revisão</strong><span>As respostas estão bloqueadas porque esta prova já foi finalizada.</span><button onClick={() => setReviewing(false)}>Voltar ao resultado</button></div>}
             <div className="exam-question-meta"><div><span>QUESTÃO {question.index} DE 180</span><strong>{areaLabels[question.area]}</strong></div><button className={flagged.includes(question.index) ? "active" : ""} onClick={toggleFlag}>{flagged.includes(question.index) ? "★ Marcada para revisar" : "☆ Marcar para revisar"}</button></div>
             <article className="exam-question-card"><QuestionContent question={question} /></article>
-            <section className="exam-alternatives" aria-label={`Alternativas da questão ${question.index}`}>{question.cancelled ? <div className="cancelled-answer"><strong>Questão anulada</strong><span>Use “Próxima” para continuar. Ela não altera seu resultado.</span></div> : question.alternatives.map((alternative) => { const state = !chosen ? "" : alternative.letter === question.correctAlternative ? "correct" : alternative.letter === chosen ? "wrong" : ""; return <button disabled={storedFinished} key={alternative.letter} className={`${chosen === alternative.letter ? "selected" : ""} ${state}`} onClick={() => chooseAnswer(alternative.letter)}><span>{alternative.letter}</span><div>{alternative.text && <p>{alternative.text}</p>}{alternative.file && <QuestionImage source={alternative.file} alt={`Alternativa ${alternative.letter} da questão ${question.index}`} />}</div>{chosen && alternative.letter === question.correctAlternative && <b>✓ Correta</b>}{chosen && alternative.letter === chosen && chosen !== question.correctAlternative && <b>✕ Sua resposta</b>}</button>; })}</section>
-            {feedback && <div className={`exam-instant-feedback ${feedback}`}><strong>{feedback === "correct" ? "Você acertou!" : `Você errou. A resposta correta é ${question.correctAlternative}.`}</strong><span>O resultado já foi salvo; você ainda pode trocar a alternativa.</span></div>}
+            <section className="exam-alternatives" aria-label={`Alternativas da questão ${question.index}`}>{question.cancelled ? <div className="cancelled-answer"><strong>Questão anulada</strong><span>Use “Próxima” para continuar. Ela não altera seu resultado.</span></div> : question.alternatives.map((alternative) => { const state = !chosen ? "" : alternative.letter === question.correctAlternative ? "correct" : alternative.letter === chosen ? "wrong" : ""; return <button disabled={Boolean(chosen) || storedFinished} key={alternative.letter} className={`${chosen === alternative.letter ? "selected" : ""} ${state}`} onClick={() => chooseAnswer(alternative.letter)}><span>{alternative.letter}</span><div>{alternative.text && <p>{alternative.text}</p>}{alternative.file && <QuestionImage source={alternative.file} alt={`Alternativa ${alternative.letter} da questão ${question.index}`} />}</div>{chosen && alternative.letter === question.correctAlternative && <b>✓ Correta</b>}{chosen && alternative.letter === chosen && chosen !== question.correctAlternative && <b>✕ Sua resposta</b>}</button>; })}</section>
+            {feedback && <div className={`exam-instant-feedback ${feedback}`}><strong>{feedback === "correct" ? "Você acertou!" : `Você errou. A resposta correta é ${question.correctAlternative}.`}</strong><span>Resposta salva e bloqueada. Agora siga para a próxima questão.</span></div>}
             <footer className="exam-question-actions"><button className="secondary" disabled={current === 1} onClick={() => goTo(current - 1)}>← Anterior</button><span>Use as setas do teclado para navegar</span>{current < 180 ? <button className="primary" onClick={() => goTo(current + 1)}>Próxima →</button> : <button className="primary" onClick={finishExam}>Ver resultado</button>}</footer>
           </main>
         </div>

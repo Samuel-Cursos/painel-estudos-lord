@@ -16,6 +16,7 @@ type Props = {
   onAnswerSheetsChange: (next: ExamAnswerSheetMap) => void;
   onAnswerSheetsPersist: (next: ExamAnswerSheetMap) => void;
   onNotice: (message: string) => void;
+  isAdmin?: boolean;
 };
 
 const OFFICIAL_ARCHIVE = "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem/provas-e-gabaritos";
@@ -41,7 +42,7 @@ function timeLabel(totalSeconds: number) {
   return `${hours}h${String(minutes).padStart(2, "0")}`;
 }
 
-export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentResult, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice }: Props) {
+export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentResult, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice, isAdmin = false }: Props) {
   const [selectedYear, setSelectedYear] = useState(2025);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const sheetKey = `${selectedYear}-regular`;
@@ -85,17 +86,17 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
 
   return <div className="exam-library">
     <button className="back-link assessment-back" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>↑ Voltar ao início da biblioteca</button>
-    <section className="assessment-hero exam-library-hero"><div><span className="eyebrow">PROVAS OFICIAIS · DENTRO DA CLAREIA</span><h2>ENEM 2009 a 2025</h2><p>Escolha uma edição e resolva as 180 questões, uma por vez, sem abrir PDF. A correção usa o gabarito oficial e seu progresso fica salvo para continuar outro dia.</p></div><aside><strong>17</strong><span>edições completas</span><strong>3.060</strong><span>questões organizadas</span></aside></section>
+    <section className="assessment-hero exam-library-hero"><div><span className="eyebrow">PROVAS OFICIAIS · DENTRO DA CLAREIA</span><h2>ENEM 2009 a 2025</h2><p>Escolha uma edição e resolva as 180 questões, uma por vez, sem abrir PDF. Cada resposta é corrigida, bloqueada e salva; no final, você recebe um diagnóstico dos temas que mais precisa estudar.</p></div><aside><strong>17</strong><span>edições completas</span><strong>3.060</strong><span>questões organizadas</span></aside></section>
 
     <section className="section-block exam-year-browser"><div className="section-heading"><div><span className="eyebrow">1 · ESCOLHA O ANO</span><h2>Provas disponíveis</h2><p>Somente edições com 180 questões e gabarito validados aparecem aqui.</p></div><a className="official-source-link" href={OFFICIAL_ARCHIVE} target="_blank" rel="noreferrer">Consultar acervo do INEP ↗</a></div>{groupedYears.map((group) => <div className="exam-year-group" key={group.title}><div><strong>{group.title}</strong><small>{group.detail}</small></div><div>{group.years.map((year) => { const saved = answerSheets[`${year}-regular`] ?? mergeLegacySheets(answerSheets[`${year}-regular-d1`], answerSheets[`${year}-regular-d2`]); const count = Object.values(saved?.answers ?? {}).filter(Boolean).length; return <button key={year} className={selectedYear === year ? "active" : ""} onClick={() => { setSelectedYear(year); setSimulatorOpen(false); }}>{year}<small>{saved?.status === "finished" ? "✓ concluída" : count ? `${count}/180 salvas` : "modo prova"}</small></button>; })}</div></div>)}</section>
 
-    <section className="section-block selected-exam"><div className="selected-exam-head"><div><span className="eyebrow">2 · REALIZE A PROVA</span><h2>ENEM {selectedYear} · 180 questões</h2><p>A sequência é única: você não precisa separar por dia. Pode parar quando quiser e retomar pela última questão ou pelo mapa das pendentes. Nas edições com língua estrangeira, a versão organizada usa Inglês.</p></div><div className="selected-exam-actions"><button className="primary exam-start-button" onClick={openExam}>{result ? "Rever resultado" : answered ? `Continuar prova · ${answered}/180` : "Começar prova"}</button></div></div><div className="exam-instruction success"><span>✓</span><p><strong>Correção automática ativa.</strong> Cada resposta recebe retorno imediato. Questões anuladas permanecem na numeração, mas não contam como erro.</p></div>
+    <section className="section-block selected-exam"><div className="selected-exam-head"><div><span className="eyebrow">2 · REALIZE A PROVA</span><h2>ENEM {selectedYear} · 180 questões</h2><p>A sequência é única: você não precisa separar por dia. Pode parar quando quiser e retomar pela última questão ou pelo mapa das pendentes. Nas edições com língua estrangeira, a versão organizada usa Inglês.</p></div><div className="selected-exam-actions"><button className="primary exam-start-button" onClick={openExam}>{result ? "Rever resultado" : answered ? `Continuar prova · ${answered}/180` : "Começar prova"}</button></div></div><div className="exam-instruction success"><span>✓</span><p><strong>Correção automática ativa.</strong> Depois de marcar, a alternativa fica bloqueada. No resultado final, a Clareia transforma seus erros em prioridades de estudo por tema.</p></div>
       <div className="exam-progress-card"><div><span>Seu progresso</span><strong>{answered}<small>/180 respondidas</small></strong></div><i><b style={{ width: `${(answered / 180) * 100}%` }} /></i><p>{sheet.currentQuestion ? `Última posição: questão ${sheet.currentQuestion}` : "Você ainda não começou esta edição."}</p></div>
       {(result || record) && <div className="exam-saved-result"><div><span>ÚLTIMO RESULTADO</span><strong>{result?.correct ?? record?.objective ?? 0}<small> acertos</small></strong></div><p>{result ? `${result.wrong} erros · ${result.blank} em branco · ${result.cancelled} anulada(s)` : `${record?.lc ?? 0} LC · ${record?.ch ?? 0} CH · ${record?.cn ?? 0} CN · ${record?.math ?? 0} MAT`}</p><button className="secondary" onClick={openExam}>Abrir prova</button></div>}
     </section>
 
     <section className="exam-library-note"><span>i</span><p><strong>Por que começa em 2009?</strong> É o formato de 180 questões usado pelo ENEM atual. As edições anteriores continuam no acervo oficial, mas não são mostradas como simulados de 180 questões.</p></section>
 
-    {simulatorOpen && <OfficialExamSimulator key={sheetKey} year={selectedYear} sheet={sheet} onChange={(next) => replaceCurrentSheet(next)} onPersist={(next) => replaceCurrentSheet(next, true)} onFinish={finishOfficialSimulation} onClose={(next) => { replaceCurrentSheet(next, true); setSimulatorOpen(false); }} />}
+    {simulatorOpen && <OfficialExamSimulator key={sheetKey} year={selectedYear} sheet={sheet} isAdmin={isAdmin} onChange={(next) => replaceCurrentSheet(next)} onPersist={(next) => replaceCurrentSheet(next, true)} onFinish={finishOfficialSimulation} onClose={(next) => { replaceCurrentSheet(next, true); setSimulatorOpen(false); }} />}
   </div>;
 }

@@ -33,6 +33,14 @@ export type OfficialExamResult = {
   finishedAt: string;
 };
 
+export type ExamTestAnswerPlan = {
+  answers: Record<string, string>;
+  targetQuestion: number;
+  filledCount: number;
+  correctCount: number;
+  wrongCount: number;
+};
+
 type TopicDefinition = {
   id: string;
   area: ExamAreaId;
@@ -111,6 +119,34 @@ export function classifyExamQuestion(question: EnemQuestionData): TopicDefinitio
     }
   }
   return selected;
+}
+
+/**
+ * Creates a deterministic mixed answer sheet for the ADM's QA shortcut.
+ * The last valid question is intentionally left blank so the final step can
+ * still be tested manually. It never runs for students; the simulator guards
+ * the control with the owner account before calling this helper.
+ */
+export function buildExamTestAnswerPlan(exam: EnemExamData): ExamTestAnswerPlan {
+  const answerable = exam.questions.filter((question) => !question.cancelled && /^[A-E]$/.test(question.correctAlternative ?? ""));
+  const target = answerable.at(-1) ?? exam.questions.at(-1);
+  if (!target) return { answers: {}, targetQuestion: 180, filledCount: 0, correctCount: 0, wrongCount: 0 };
+
+  const answers: Record<string, string> = {};
+  let correctCount = 0;
+  let wrongCount = 0;
+  for (const question of answerable) {
+    if (question.index === target.index) continue;
+    const makeCorrect = ((question.index * 17) + exam.year) % 5 < 2;
+    const wrongAlternative = question.alternatives.find((alternative) => alternative.letter !== question.correctAlternative)?.letter;
+    const answer = makeCorrect ? question.correctAlternative! : wrongAlternative;
+    if (!answer) continue;
+    answers[String(question.index)] = answer;
+    if (makeCorrect) correctCount += 1;
+    else wrongCount += 1;
+  }
+
+  return { answers, targetQuestion: target.index, filledCount: correctCount + wrongCount, correctCount, wrongCount };
 }
 
 function allocateFocusPercent(items: Array<{ weight: number }>) {

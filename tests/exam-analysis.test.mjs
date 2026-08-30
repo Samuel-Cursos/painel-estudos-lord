@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { buildExamResult, classifyExamQuestion } from "../app/exam-analysis.ts";
+import { buildExamResult, buildExamTestAnswerPlan, classifyExamQuestion } from "../app/exam-analysis.ts";
 
 const readJson = async (path) => JSON.parse(await readFile(new URL(`../${path}`, import.meta.url), "utf8"));
 
@@ -52,4 +52,15 @@ test("uma tentativa sem erros não inventa prioridades de estudo", async () => {
 
   assert.equal(result.wrong, 0);
   assert.deepEqual(result.topics, []);
+});
+
+test("o atalho de QA deixa a última questão para o ADM e mistura acertos e erros", async () => {
+  const exam = await readJson("public/enem-exams/2024.json");
+  const plan = buildExamTestAnswerPlan(exam);
+  assert.equal(plan.targetQuestion, 180);
+  assert.equal(plan.filledCount, plan.correctCount + plan.wrongCount);
+  assert.ok(plan.correctCount > 0);
+  assert.ok(plan.wrongCount > 0);
+  assert.equal(plan.answers["180"], undefined);
+  assert.equal(Object.keys(plan.answers).length, plan.filledCount);
 });

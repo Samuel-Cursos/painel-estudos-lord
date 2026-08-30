@@ -16,6 +16,7 @@ type Props = {
   onAnswerSheetsChange: (next: ExamAnswerSheetMap) => void;
   onAnswerSheetsPersist: (next: ExamAnswerSheetMap) => void;
   onNotice: (message: string) => void;
+  isAdmin?: boolean;
 };
 
 const OFFICIAL_ARCHIVE = "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem/provas-e-gabaritos";
@@ -41,7 +42,7 @@ function timeLabel(totalSeconds: number) {
   return `${hours}h${String(minutes).padStart(2, "0")}`;
 }
 
-export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentResult, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice }: Props) {
+export default function EnemExamLibrary({ assessments, answerSheets, onAssessmentResult, onAnswerSheetsChange, onAnswerSheetsPersist, onNotice, isAdmin = false }: Props) {
   const [selectedYear, setSelectedYear] = useState(2025);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const sheetKey = `${selectedYear}-regular`;
@@ -96,6 +97,6 @@ export default function EnemExamLibrary({ assessments, answerSheets, onAssessmen
 
     <section className="exam-library-note"><span>i</span><p><strong>Por que começa em 2009?</strong> É o formato de 180 questões usado pelo ENEM atual. As edições anteriores continuam no acervo oficial, mas não são mostradas como simulados de 180 questões.</p></section>
 
-    {simulatorOpen && <OfficialExamSimulator key={sheetKey} year={selectedYear} sheet={sheet} onChange={(next) => replaceCurrentSheet(next)} onPersist={(next) => replaceCurrentSheet(next, true)} onFinish={finishOfficialSimulation} onClose={(next) => { replaceCurrentSheet(next, true); setSimulatorOpen(false); }} />}
+    {simulatorOpen && <OfficialExamSimulator key={sheetKey} year={selectedYear} sheet={sheet} isAdmin={isAdmin} onChange={(next) => replaceCurrentSheet(next)} onPersist={(next) => replaceCurrentSheet(next, true)} onFinish={finishOfficialSimulation} onClose={(next) => { replaceCurrentSheet(next, true); setSimulatorOpen(false); }} />}
   </div>;
 }

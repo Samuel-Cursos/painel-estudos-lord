@@ -109,10 +109,11 @@ test("as provas internas cobrem 2009 a 2025 com 180 questões válidas", async (
 });
 
 test("o Modo Prova é interno, contínuo, retomável, bloqueia respostas e diagnostica temas", async () => {
-  const [simulator, analysis, library, examData, bank, styles] = await Promise.all([
+  const [simulator, analysis, library, dashboard, examData, bank, styles] = await Promise.all([
     read("app/official-exam-simulator.tsx"),
     read("app/exam-analysis.ts"),
     read("app/enem-exam-library.tsx"),
+    read("app/study-dashboard.tsx"),
     read("app/enem-exam-data.ts"),
     read("app/question-bank.tsx"),
     read("app/globals.css"),
@@ -126,6 +127,14 @@ test("o Modo Prova é interno, contínuo, retomável, bloqueia respostas e diagn
   assert.match(simulator, /disabled=\{Boolean\(chosen\) \|\| storedFinished\}/);
   assert.match(simulator, /Resposta salva e bloqueada/);
   assert.match(simulator, /BUSCA ATIVA DOS SEUS ERROS/);
+  assert.match(simulator, /isAdmin\?: boolean/);
+  assert.match(simulator, /TESTE EXCLUSIVO DO ADM/);
+  assert.match(simulator, /buildExamTestAnswerPlan/);
+  assert.match(simulator, /Preencher para teste/);
+  assert.match(library, /isAdmin\?: boolean/);
+  assert.match(library, /isAdmin={isAdmin}/);
+  assert.match(dashboard, /EnemExamLibrary isAdmin={isOwner\(user\?\.email\)}/);
+  assert.match(analysis, /buildExamTestAnswerPlan/);
   assert.match(analysis, /classifyExamQuestion/);
   assert.match(analysis, /focusPercent/);
   assert.match(analysis, /wrongQuestions/);

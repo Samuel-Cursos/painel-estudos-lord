@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { areaLabels, type EnemExamData, type EnemQuestionData, type ExamAreaId } from "./enem-exam-data";
-import { buildExamResult, type OfficialExamResult } from "./exam-analysis";
+import { buildExamResult, buildExamTestAnswerPlan, type OfficialExamResult } from "./exam-analysis";
 
 export type { OfficialExamResult } from "./exam-analysis";
 
@@ -25,6 +25,7 @@ type Props = {
   onPersist: (next: SimulatorAnswerSheet) => void;
   onFinish: (result: OfficialExamResult, next: SimulatorAnswerSheet) => void;
   onClose: (next: SimulatorAnswerSheet) => void;
+  isAdmin?: boolean;
 };
 
 const areaIds: ExamAreaId[] = ["lc", "ch", "cn", "math"];
@@ -55,7 +56,7 @@ function QuestionContent({ question }: { question: EnemQuestionData }) {
   </>;
 }
 
-export default function OfficialExamSimulator({ year, sheet, onChange, onPersist, onFinish, onClose }: Props) {
+export default function OfficialExamSimulator({ year, sheet, onChange, onPersist, onFinish, onClose, isAdmin = false }: Props) {
   const initialSheet = useRef(sheet);
   const [exam, setExam] = useState<EnemExamData | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -65,6 +66,7 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
   const [timerRunning, setTimerRunning] = useState(sheet.status !== "finished");
   const [navigatorOpen, setNavigatorOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [testNotice, setTestNotice] = useState("");
   const latestState = useRef({ sheet: localSheet, current, elapsedSeconds });
 
   useEffect(() => {
@@ -157,6 +159,16 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
     commit(snapshot({ answers, status: "in_progress", result: undefined }), true);
   }
 
+  function fillAdminTestAnswers() {
+    if (!isAdmin || !exam || storedFinished) return;
+    if (!window.confirm("Preencher a tentativa com respostas variadas e deixar a última questão para você? As respostas atuais desta edição serão substituídas.")) return;
+    const plan = buildExamTestAnswerPlan(exam);
+    const next = snapshot({ answers: plan.answers, currentQuestion: plan.targetQuestion, status: "in_progress", result: undefined });
+    commit(next, true);
+    setCurrent(plan.targetQuestion);
+    setTestNotice(`${plan.filledCount} questões preenchidas: ${plan.correctCount} certas e ${plan.wrongCount} erradas. A questão ${plan.targetQuestion} ficou livre para você marcar.`);
+  }
+
   function goTo(index: number) {
     const nextCurrent = Math.min(180, Math.max(1, index));
     setCurrent(nextCurrent);
@@ -214,6 +226,12 @@ export default function OfficialExamSimulator({ year, sheet, onChange, onPersist
           <div className="simulator-completion"><i role="progressbar" aria-label="Progresso da prova" aria-valuemin={0} aria-valuemax={180} aria-valuenow={completed}><b style={{ width: `${(completed / 180) * 100}%` }} /></i><span>{answered} respondidas{cancelled ? ` · ${cancelled} anulada(s)` : ""}</span></div>
           <div className="simulator-timer"><strong>{formatTimer(elapsedSeconds)}</strong><button className="secondary" onClick={() => { setTimerRunning((value) => !value); commit(snapshot(), true); }}>{timerRunning ? "Pausar" : "Continuar"}</button></div>
         </div>
+
+        {isAdmin && <section className="exam-admin-test-tools" aria-label="Ferramentas de teste do ADM">
+          <div><span>TESTE EXCLUSIVO DO ADM</span><strong>Validar o resultado sem responder 180 questões</strong><p>Preenche as questões com acertos e erros variados e deixa a última questão válida aberta para você marcar.</p></div>
+          <button className="secondary" type="button" onClick={fillAdminTestAnswers}>Preencher para teste</button>
+          {testNotice && <small role="status">{testNotice}</small>}
+        </section>}
 
         <div className={`official-simulator-layout ${navigatorOpen ? "navigator-open" : ""}`}>
           <aside className="exam-question-navigator" aria-label="Mapa das 180 questões">

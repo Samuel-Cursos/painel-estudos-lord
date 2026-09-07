@@ -1,0 +1,78 @@
+.writing-mode-switch{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;padding:6px;background:#e9e7e2;border-radius:14px;width:fit-content;max-width:100%}
+.writing-mode-switch button{border:0;background:transparent;color:var(--ink);padding:12px 18px;border-radius:10px;font:inherit;font-size:14px;font-weight:750;cursor:pointer}
+.writing-mode-switch button[aria-pressed=true]{background:var(--navy);color:#fff;box-shadow:0 3px 12px #161b3115}
+.writing-mode-switch button span{font-size:12px;margin-left:8px;opacity:.8}
+.enem-writing{display:grid;gap:22px;min-width:0;color:var(--ink)}
+.enem-writing [hidden]{display:none!important}
+.enem-writing button,.enem-writing a,.writing-mode-switch button{touch-action:manipulation}
+.enem-writing button:focus-visible,.enem-writing a:focus-visible,.writing-mode-switch button:focus-visible{outline:3px solid #56792a;outline-offset:3px}
+.enem-writing button:disabled{opacity:.5;cursor:not-allowed}
+.enem-writing-header,.enem-section-heading,.enem-writing-theme{display:flex;justify-content:space-between;align-items:center;gap:18px}
+.enem-writing-header{align-items:flex-start}
+.enem-writing-header h2{margin:8px 0;font-size:32px;letter-spacing:-.04em;line-height:1.15}
+.enem-writing p{font-size:16px;line-height:1.6;margin:8px 0;color:var(--muted)}
+.enem-edition-badge{padding:8px 12px;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:13px;white-space:nowrap}
+.enem-writing-years{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.enem-writing-years button{display:grid;gap:5px;text-align:left;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}
+.enem-writing-years button strong{font-size:24px;letter-spacing:-.04em}
+.enem-writing-years button span{font-size:13px;color:var(--muted)}
+.enem-writing-years button[aria-pressed=true]{background:var(--navy);color:#fff;border-color:var(--navy);box-shadow:inset 0 -4px var(--lime)}
+.enem-writing-years button[aria-pressed=true] span{color:#dce4bd}
+.enem-writing-theme{padding:22px 24px;border-left:4px solid #92ad46;background:#fff;border-radius:0 14px 14px 0}
+.enem-writing-theme h3{font-size:24px;line-height:1.35;letter-spacing:-.02em;margin:8px 0 0;max-width:900px}
+.enem-writing-theme .secondary{flex-shrink:0}
+.enem-writing-workspace{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px;align-items:start}
+.enem-writing .section-block{margin:0;padding:22px;border-radius:16px;min-width:0}
+.enem-section-heading{margin-bottom:16px;align-items:flex-start}
+.enem-section-heading h3{font-size:21px;letter-spacing:-.025em;margin:6px 0 0;line-height:1.3}
+.enem-section-heading h4{margin:0}
+.enem-section-heading>a{font-size:14px;color:#3e5924;text-underline-offset:4px;flex-shrink:0}
+.enem-section-heading>span{font-size:13px;color:var(--muted)}
+.enem-reader-toolbar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;margin-bottom:12px}
+.enem-reader-toolbar>div{display:flex;align-items:center;gap:5px}
+.enem-reader-toolbar button{min-height:38px;min-width:38px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:13px;color:var(--ink);cursor:pointer}
+.enem-reader-toolbar button[aria-pressed=true]{background:#eaf1da;border-color:#92ad46}
+.enem-reader-toolbar span{font-size:13px;min-width:36px;text-align:center}
+.enem-reader-container{min-width:0;min-height:260px;position:relative}
+.enem-page-scroll{overflow:auto;max-height:76vh;border:1px solid var(--line);border-radius:8px;background:#fff;overscroll-behavior:contain}
+.enem-page-scroll canvas{display:block;max-width:none}
+.enem-reader-status{padding:45px 18px!important;min-height:260px;background:#f1f2ee;border-radius:8px;text-align:center}
+.enem-reader-status a{display:block;margin-top:16px;color:#3e5924;font-size:14px}
+.enem-writing .enem-reader-hint{font-size:13px;line-height:1.6;margin:12px 0 0}
+.enem-accessible-text{max-height:76vh;overflow:auto;padding:18px;background:#fafafa;border:1px solid var(--line);border-radius:8px;font-size:16px;line-height:1.7}
+.enem-accessible-text>div{white-space:pre-wrap;overflow-wrap:anywhere}
+.enem-text-button{padding:6px 0;border:0;background:none;color:#3e5924;text-decoration:underline;text-underline-offset:4px;font:inherit;font-size:14px;cursor:pointer}
+.enem-writing details{border:1px solid var(--line);border-radius:10px}
+.enem-writing summary{padding:13px 14px;font-size:14px;font-weight:700;cursor:pointer;line-height:1.5}
+.enem-writing details>div{padding:0 14px 14px;display:grid;gap:12px}
+.enem-writing label{display:grid;gap:6px;font-size:14px;font-weight:650}
+.enem-writing label textarea,.enem-writing label input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;color:var(--ink);font:inherit;font-weight:400;font-size:16px;line-height:1.6}
+.enem-writing label textarea{min-height:80px;resize:vertical}
+.enem-writing .enem-text-label{margin:18px 0 8px}
+.enem-main-text{width:100%;min-height:480px;resize:vertical;display:block;border:1px solid #bdc4b0;border-radius:10px;padding:20px;background:#fdfdfb;color:var(--ink);font:inherit;font-size:17px;line-height:1.9;scroll-margin-top:25px}
+.enem-main-text:focus,.enem-writing textarea:focus,.enem-writing input:focus{outline:2px solid #7e9c49;outline-offset:2px}
+.enem-writing-counts{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-top:12px;color:var(--muted);font-size:13px}
+.enem-writing-counts strong{color:var(--ink);font-size:16px}
+.enem-writing .enem-save-status{font-size:13px;background:#eff4e6;border-radius:8px;padding:10px 12px;color:#3e5924;margin:16px 0}
+.enem-writing .enem-save-status.has-error{background:#fff3da;color:#755316}
+.enem-writing-actions{display:flex;flex-wrap:wrap;gap:10px}
+.enem-writing .primary,.enem-writing .secondary{font-size:14px;min-height:42px;line-height:1.4;padding:11px 14px}
+.enem-review-button{display:block;width:100%;margin-top:12px;padding:13px;border:1px solid #c1cba9;border-radius:10px;background:#f6f8f0;color:#344b1c;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.enem-writing-review>p{max-width:950px}
+.enem-writing-review h4{font-size:17px;margin:22px 0 12px}
+.enem-observations{display:grid;gap:10px;margin-bottom:24px}
+.enem-observations article{border-left:3px solid #d2ac55;background:#fff8e8;padding:14px 16px;border-radius:0 8px 8px 0}
+.enem-observations strong{font-size:15px}.enem-observations p{font-size:14px;margin-bottom:0}
+.enem-competency-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.enem-competency-grid fieldset{border:1px solid var(--line);padding:14px;border-radius:10px;min-width:0}
+.enem-competency-grid legend{font-size:16px;font-weight:750;padding:0 5px}
+.enem-competency-grid label{display:flex;align-items:flex-start;gap:10px;margin:10px 0;font-size:14px;font-weight:400;line-height:1.6;cursor:pointer}
+.enem-competency-grid label input{width:18px;height:18px;flex-shrink:0;margin-top:3px;accent-color:#49602c}
+.enem-writing-history>article{display:flex;justify-content:space-between;gap:18px;border-top:1px solid var(--line);padding:18px 0}
+.enem-writing-history>article>div{min-width:0}
+.enem-writing-history>article>div:last-child{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.enem-writing-history>article strong{font-size:16px}.enem-writing-history>article p{font-size:14px}
+.enem-history-excerpt{overflow-wrap:anywhere}
+.enem-manual-feedback{margin-top:20px}
+@media(max-width:1100px){.enem-writing-workspace{grid-template-columns:1fr}.enem-page-scroll,.enem-accessible-text{max-height:65vh}.enem-main-text{min-height:460px}.enem-writing-years button{padding:12px}.enem-writing-years button span{font-size:12px}}
+@media(max-width:600px){.writing-mode-switch{width:100%}.writing-mode-switch button{flex:1;padding:10px;font-size:13px}.writing-mode-switch button span{display:block;margin:3px 0 0}.enem-writing{gap:16px}.enem-writing-header,.enem-writing-theme{align-items:flex-start;flex-direction:column}.enem-writing-header h2{font-size:28px}.enem-edition-badge{font-size:12px}.enem-writing-years{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.enem-writing-theme{padding:18px}.enem-writing-theme h3{font-size:21px}.enem-writing .section-block{padding:16px}.enem-section-heading{flex-wrap:wrap;gap:10px}.enem-competency-grid{grid-template-columns:1fr}.enem-main-text{padding:14px;min-height:440px;font-size:16px}.enem-writing-actions>*{flex:1}.enem-writing-history>article{flex-direction:column}}

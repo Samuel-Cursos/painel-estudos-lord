@@ -7,6 +7,8 @@ import { builtInWritingMaterials, type WritingMaterial } from "./writing-materia
 
 export type EssayRecord = {
   id: number;
+  enemYear?: number;
+  selfReview?: Record<string, boolean>;
   materialId?: string;
   theme: string;
   date: string;

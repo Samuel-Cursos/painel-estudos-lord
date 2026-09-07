@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Clareia | Preparação ENEM",
-  description: "Plano completo do ENEM, 2.000 questões, provas oficiais com correção automática, estúdio de Redação e 24 aulas de Inglês.",
+  title: "Clareia Educação | Estude com mais clareza",
+  description: "Plataforma Clareia: cronograma, questões, simulados, provas do ENEM, redação, Inglês e acompanhamento do seu progresso.",
   other: {
     "codex-preview": "development",
   },

@@ -29,4 +29,41 @@ export function inspectWriting(text: string) {
 export function findSupportOverlap(text: string, support: string, theme: string) {
   const normalize = (value: string) => (value.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]+/gu) ?? []);
   const sourceWords = normalize(support);
-  const essayWords = normalize(text)=¥”æm¢Gß≤⁄Óù∆≠y÷ˆ<:÷ÊñÚ„¬˜„¬ˆFóc„¬ˆ'Fñ6∆S„¬ˆFóc„∆Fób6∆74Ê÷S“&6ÜB÷&˜Ç6∂ñ∆¬◊&ˆ◊B#„∆Fóc„«7G&ˆÊs‰÷VÁ6vV“&ˆÁF&Ú6ÜDuC¬˜7G&ˆÊs„«Ó(	≈VW&ÚW7GVF"∑6V∆V7FVE6∂ñ∆¬Á6∂ñ∆«“¬FÚL;7ñ6Ú∂Fó7∆ïF˜ñ2á6V∆V7FVE6∂ñ∆¬ó“V“∑7V&¶V7D'îñBá6V∆V7FVE6∂ñ∆¬Á7V&¶V7BíÊÊ÷W“‚Wá∆óVRFÚ¶W&Ú¬÷˜7G&RWÜV◊∆˜2RFWˆó2FW7FR÷WRFˆ‹:÷ÊñÚÓ(	”¬˜„¬ˆFóc„∆'WGFˆ‚ˆ‰6∆ñ6≥◊≤Çí”‚6˜ïFWáBÜVW&ÚW7GVF"G∑6V∆V7FVE6∂ñ∆¬Á6∂ñ∆«“¬FÚL;7ñ6ÚG∂Fó7∆ïF˜ñ2á6V∆V7FVE6∂ñ∆¬ó“V“G∑7V&¶V7D'îñBá6V∆V7FVE6∂ñ∆¬Á7V&¶V7BíÊÊ÷W“‚Wá∆óVRFÚ¶W&ÚV“∆ñÊwVvV“6ñ◊∆W2¬÷˜7G&RWÜV◊∆˜2RFWˆó2÷R76RWÜW&<:÷6ñ˜2w&GVó2Êó”‰6˜ñ"÷VÁ6vV”¬ˆ'WGFˆ„„¬ˆFócÁ∂Ü5VW7Fñˆ‰&Ê≤á6V∆V7FVE6∂ñ∆¬Á7V&¶V7Bíbb∆'WGFˆ‚6∆74Ê÷S“'VW7Fñˆ‚◊&V6ˆ÷÷VÊB÷'WGFˆ‚"ˆ‰6∆ñ6≥◊≤Çí”‚˜VÂVW7Fñˆ‰f˜%6∂ñ∆¬á6V∆V7FVE6∂ñ∆¬ó”„«7„„Û¬˜7„„∆Fóc„«7G&ˆÊsÂ&W6ˆ«fW"V÷VW7L:6ÚFW7FR77VÁFÛ¬˜7G&ˆÊs„«6÷∆√‰Ú6FW&ÊÚW66ˆ∆ÜRV÷VRfˆ<:¢ñÊFÏ:6Ú&W7ˆÊFWR„¬˜6÷∆√„¬ˆFóc„∆#Ó(i#¬ˆ#„¬ˆ'WGFˆ„Á”∆Fób6∆74Ê÷S“&÷ˆF¬◊7FvR÷7FñˆÁ2#Á∑7FvW2Ê÷Çá7FvRí”‚∆'WGFˆ‚∂Wì◊∑7FvRÊñG“6∆74Ê÷S◊∑6∂ñ∆≈&ˆw&W75∑6V∆V7FVE6∂ñ∆¬ÊñE”ÚÂ∑7FvRÊñE“Ú&FˆÊR"¢"'“ˆ‰6∆ñ6≥◊≤Çí”‚&WVW7E6∂ñ∆≈7FvRá6V∆V7FVE6∂ñ∆¬¬7FvRÊñBó”„«7„Á∑6∂ñ∆≈&ˆw&W75∑6V∆V7FVE6∂ñ∆¬ÊñE”ÚÂ∑7FvRÊñE“Ú.)…2"¢7FvRÁ6Ü˜'G”¬˜7„Á∑7FvRÊ∆&V«”¬ˆ'WGFˆ„‚ó”¬ˆFóc„¬˜6V7Fñˆ„„¬ˆFócÁ–¢∂÷7FW'î∆W76ˆ‚bb∆W76ˆ‰÷7FW'ï∂÷7FW'î∆W76ˆ‚ÊñE“bbƒ÷7FW'î6ÜV6≤VW7Fñˆ„◊∂∆W76ˆ‰÷7FW'ï∂÷7FW'î∆W76ˆ‚ÊñE◊“FóF∆S◊∂ñÊvÃ:ß2+rG∂÷7FW'î∆W76ˆ‚ÁFóF∆W÷“ˆ‰6∆˜6S◊≤Çí”‚6WD÷7FW'î∆W76ˆ‚ÜÁV∆¬ó“ˆÂ73◊≤Çí”‚≤6WD∆W76ˆÂ7FGW2Ü÷7FW'î∆W76ˆ‚¬&FˆÊR"ì≤6WD÷7FW'î∆W76ˆ‚ÜÁV∆¬ì≤6WE6V∆V7FVD∆W76ˆ‚ÜÁV∆¬ì≤◊“ÛÁ–¢∂÷7FW'ï6∂ñ∆¬bbƒ÷7FW'î6ÜV6≤VW7Fñˆ„◊∑6∂ñ∆ƒ÷7FW'ïVW7Fñˆ‚Ü÷7FW'ï6∂ñ∆¬Á7V&¶V7B¬÷7FW'ï6∂ñ∆¬Á6∂ñ∆¬ó“FóF∆S◊∂G∑7V&¶V7D'îñBÜ÷7FW'ï6∂ñ∆¬Á7V&¶V7BíÊÊ÷W“+rG∂÷7FW'ï6∂ñ∆¬Á6∂ñ∆«÷“ˆ‰6∆˜6S◊≤Çí”‚6WD÷7FW'ï6∂ñ∆¬ÜÁV∆¬ó“ˆÂ73◊≤Çí”‚≤Fˆvv∆U6∂ñ∆≈7FvRÜ÷7FW'ï6∂ñ∆¬¬&÷7FW'í"ì≤6WD÷7FW'ï6∂ñ∆¬ÜÁV∆¬ì≤6WE6V∆V7FVE6∂ñ∆¬ÜÁV∆¬ì≤◊“ÛÁ–¢∂∆ˆFñÊrbb∆Fób6∆74Ê÷S“&∆ˆFñÊr◊67&VV‚#„∆Fób6∆74Ê÷S“&∆ˆFW""Û„«7„‰˜&vÊó¶ÊFÚ7V&W&:|:6Ú‚‚„¬˜7„„¬ˆFócÁ–¢¬ˆ÷ñ„„∞ß–
+  const essayWords = normalize(text);
+  const themeWords = normalize(theme).join(" ");
+  const size = 12;
+  const phrases = new Set<string>();
+  for (let i = 0; i <= sourceWords.length - size; i++) phrases.add(sourceWords.slice(i, i + size).join(" "));
+  for (let i = 0; i <= essayWords.length - size; i++) {
+    const phrase = essayWords.slice(i, i + size).join(" ");
+    if (!themeWords.includes(phrase) && phrases.has(phrase)) return phrase;
+  }
+  return null;
+}
+
+export const writingReviewGuide = [
+  { id: "c1", title: "1 ¬∑ Escrita formal", items: [
+    { id: "c1-language", text: "Reli ortografia, acentua√ß√£o, concord√¢ncia e pontua√ß√£o." },
+    { id: "c1-register", text: "Usei linguagem adequada a um texto formal." },
+  ] },
+  { id: "c2", title: "2 ¬∑ Tema e repert√≥rio", items: [
+    { id: "c2-theme", text: "Respondi ao recorte completo do tema, e n√£o s√≥ ao assunto geral." },
+    { id: "c2-repertoire", text: "Expliquei como meu repert√≥rio contribui para a discuss√£o, sem apenas citar." },
+    { id: "c2-authorship", text: "Desenvolvi minhas pr√≥prias ideias; n√£o copiei os textos motivadores." },
+  ] },
+  { id: "c3", title: "3 ¬∑ Argumenta√ß√£o", items: [
+    { id: "c3-thesis", text: "Minha posi√ß√£o est√° clara e √© sustentada ao longo do texto." },
+    { id: "c3-evidence", text: "Expliquei meus argumentos e relacionei os exemplos √† tese." },
+  ] },
+  { id: "c4", title: "4 ¬∑ Coes√£o", items: [
+    { id: "c4-links", text: "As frases e os par√°grafos se conectam com sentido." },
+    { id: "c4-references", text: "Pronomes e express√µes de retomada deixam claro a que me refiro." },
+  ] },
+  { id: "c5", title: "5 ¬∑ Interven√ß√£o", items: [
+    { id: "c5-action", text: "Propus uma a√ß√£o e identifiquei quem pode execut√°-la." },
+    { id: "c5-method", text: "Expliquei o meio, a finalidade e um detalhamento da proposta." },
+    { id: "c5-rights", text: "Minha interven√ß√£o responde ao problema discutido e respeita os direitos humanos." },
+  ] },
+] as const;
+
+export const writingGuideUrl = "https://www.gov.br/inep/pt-br/centrais-de-conteudo/acervo-linha-editorial/publicacoes-institucionais/avaliacoes-e-exames-da-educacao-basica/redacao-do-enem-2025-cartilha-do-a-participante";

@@ -17,12 +17,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Clareia Educação | Estude com mais clareza",
   description: "Plataforma Clareia: cronograma, questões, simulados, provas do ENEM, redação, Inglês e acompanhamento do seu progresso.",
+  applicationName: "Clareia",
+  manifest: "/manifest.webmanifest",
   other: {
     "codex-preview": "development",
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/clareia-logo.png",
+    shortcut: "/clareia-logo.png",
+    apple: "/clareia-logo.png",
   },
 };
 

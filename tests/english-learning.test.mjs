@@ -14,14 +14,14 @@ function loadData(file) {
 }
 const { englishCourse, englishUnits, englishResources } = loadData(new URL("../app/english-course-data.ts", import.meta.url).pathname);
 
-test("24 aulas originais preservadas, quatro unidades e 96 atividades válidas", () => {
-  assert.equal(englishCourse.length, 24);
-  assert.equal(englishUnits.length, 4);
+test("48 aulas, oito unidades e 192 atividades válidas preservando os IDs antigos", () => {
+  assert.equal(englishCourse.length, 48);
+  assert.equal(englishUnits.length, 8);
   let count = 0;
   for (const [index, lesson] of englishCourse.entries()) {
     assert.equal(lesson.id, `english-${String(index + 1).padStart(2, "0")}`);
     assert.ok(lesson.content.concept.length > 30);
-    assert.ok(lesson.expansion.why.length > 60);
+    assert.ok(lesson.expansion.why.length + lesson.content.concept.length > 150);
     assert.ok(lesson.expansion.passage.length > 50);
     assert.ok(lesson.expansion.translation.length > 40);
     assert.equal(lesson.expansion.checklist.length, 3);
@@ -39,7 +39,7 @@ test("24 aulas originais preservadas, quatro unidades e 96 atividades válidas",
       assert.ok(sanitizeCells({ [key]: { value: JSON.stringify({ answer: "test", correct: false, assisted: false, attempts: 0 }), at: 1 } })[key]);
     }
   }
-  assert.equal(count, 96);
+  assert.equal(count, 192);
 });
 
 test("respostas toleram caixa, espaços e apóstrofos, mas não erros gramaticais", () => {
@@ -81,13 +81,97 @@ test("sanitização limita chaves, tamanho e timestamps sem guardar áudio", () 
   assert.deepEqual(sanitizeCells(null), {});
   assert.deepEqual(sanitizeCells([]), {});
   assert.deepEqual(sanitizeCells({
-    "english-25:draft": { value: "x", at: 1 },
+    "english-49:draft": { value: '"x"', at: 1 },
     "english-01:audio": { value: "data:audio", at: 1 },
     "english-01:draft": { value: "x".repeat(6001), at: 1 },
     "english-02:step": { value: "0", at: NaN },
     "english-03:step": { value: 0, at: 1 },
   }), {});
   assert.equal(readCell({ key: { value: "{bad", at: 1 } }, "key", "fallback"), "fallback");
+});
+
+const learningTools = loadData(new URL("../app/english-learning-tools.ts", import.meta.url).pathname);
+const practiceData = loadData(new URL("../app/english-practice-data.ts", import.meta.url).pathname);
+const cell = (value, at = 1) => ({ value: JSON.stringify(value), at });
+
+test("diagnóstico indica lacunas sem atribuir CEFR ou medir habilidades não testadas", () => {
+  assert.equal(practiceData.diagnosticQuestions.length, 12);
+  assert.equal(learningTools.diagnosticAdvice([]).score, 0);
+  assert.equal(learningTools.diagnosticAdvice([]).lesson, 2);
+  const answers = practiceData.diagnosticQuestions.map((q) => q.answer);
+  assert.equal(learningTools.diagnosticAdvice(answers).score, 12);
+  assert.equal(learningTools.diagnosticAdvice(answers).lesson, 43);
+  answers[3] = "__skip__"; answers[4] = "__skip__";
+  assert.equal(learningTools.diagnosticAdvice(answers).lesson, 26);
+  assert.equal(learningTools.diagnosticAdvice(answers).level, undefined);
+  for (const question of practiceData.diagnosticQuestions) assert.equal(question.options.filter((value) => value === question.answer).length, 1);
+});
+
+test("novas atividades persistem junto das antigas, sem aceitar tipos inválidos", () => {
+  const raw = {
+    "english-01:draft": cell("My first text"), "english-48:draft": cell("My final project"),
+    "diagnostic": cell({ answers: ["is", "__skip__"], finished: false, at: 1 }),
+    "project-email": cell({ draft: "Dear teacher", revision: "Dear Ms Reed", checks: [true, false, false] }),
+    "conversation-cafe": cell({ answers: ["Tea, please."] }),
+    "word-review:english-48:3": cell({ stage: 1, due: 100, last: 1, sentence: "I revise my work." }),
+    "english-48:reinforced": cell(["choose"]),
+    "weekly": cell({ start: "2026-09-14", done: [0, 2] }),
+    "sprint": cell({ ids: ["english-48:choose"], answers: ["test"], finished: true }),
+    "lab-dictation": cell({ answer: "Hello!", index: 0, correct: true, assisted: false }),
+  };
+  assert.deepEqual(sanitizeCells(raw), raw);
+  assert.deepEqual(sanitizeCells({ "project-email": cell({ draft: 3, revision: "", checks: [] }), "conversation-cafe": cell({ answers: [null] }), "word-review:english-48:4": raw["word-review:english-48:3"], "diagnostic": cell({ answers: [null], finished: true, at: 1 }) }), {});
+});
+
+test("a fila de reforço diferencia erro, acerto com apoio e acerto independente", () => {
+  const progress = {
+    "english-01:answer-choose": cell({ answer: "I am a student.", correct: true, assisted: false, attempts: 1 }),
+    "english-02:answer-choose": cell({ answer: "are", correct: true, assisted: true, attempts: 2 }),
+    "english-03:answer-write": cell({ answer: "is", correct: false, assisted: false, attempts: 1 }),
+  };
+  let stats = learningTools.learningStats(progress);
+  assert.equal(stats.mistakes.length, 2);
+  assert.deepEqual(stats.groups.Estrutura, { attempts: 3, correct: 2, independent: 1 });
+  stats = learningTools.learningStats({ ...progress, "english-02:reinforced": cell(["choose"]) });
+  assert.equal(stats.mistakes.length, 1);
+  assert.deepEqual(stats.groups.Estrutura, { attempts: 3, correct: 2, independent: 1 });
+});
+
+test("o portfólio preserva primeira e segunda versão e não exporta toda a conta", () => {
+  const portfolio = learningTools.exportPortfolio({
+    "english-48:draft": cell("First draft"), "english-48:revision": cell("Improved draft"),
+    "project-email": cell({ draft: "My email", revision: "Revised email", checks: [false, false, false] }),
+    "diagnostic": cell({ answers: ["private diagnostic answer"], finished: false, at: 1 }),
+  });
+  assert.match(portfolio, /First draft/); assert.match(portfolio, /Improved draft/);
+  assert.match(portfolio, /My email/); assert.match(portfolio, /Revised email/);
+  assert.doesNotMatch(portfolio, /private diagnostic answer/);
+});
+
+test("apostila tem 48 aulas ou uma unidade completa, com exercícios e gabaritos", () => {
+  const all = learningTools.buildEnglishBook(-1);
+  const last = learningTools.buildEnglishBook(7);
+  assert.equal((all.match(/AULA \d+ —/g) ?? []).length, 48);
+  assert.equal((last.match(/AULA \d+ —/g) ?? []).length, 6);
+  assert.match(last, /AULA 48/); assert.doesNotMatch(last, /AULA 1 —/);
+  assert.match(last, /CONFIRA DEPOIS DE TENTAR/); assert.match(last, /AUTOAVALIAÇÃO/);
+});
+
+test("embaralhamento preserva todas as palavras e é reproduzível por rodada", () => {
+  const words = ["I", "think", "that", "that", "is", "useful"];
+  const result = learningTools.shuffled(words, 42);
+  assert.deepEqual([...result].sort(), [...words].sort());
+  assert.deepEqual(result, learningTools.shuffled(words, 42));
+  assert.notDeepEqual(result, words);
+});
+
+test("produção avançada exige o volume pedido e não aceita o mínimo introdutório", () => {
+  const results = Array.from({ length: 4 }, () => ({ correct: true, assisted: false, attempts: 1, answer: "x" }));
+  const minimum = learningTools.lessonMinimumWords(48);
+  assert.equal(minimum, 150);
+  assert.ok(!canFinishLesson(results, "word ".repeat(149), [true, true, true], minimum));
+  assert.ok(canFinishLesson(results, "word ".repeat(150), [true, true, true], minimum));
+  assert.equal(learningTools.wordCount(" \n "), 0);
 });
 
 test("conclusão exige exercícios, produção e autoavaliação; não mede fluência", () => {

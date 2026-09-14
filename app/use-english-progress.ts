@@ -68,7 +68,7 @@ export function useEnglishProgress(uid: string) {
     }, () => { if (alive) setStatus("Sincronização indisponível · tente novamente"); });
     updateRef.current = (name, value) => {
       const cell = { value: JSON.stringify(value), at: Math.max(Date.now(), (state[name]?.at ?? 0) + 1) };
-      if (!sanitizeCells({ [name]: cell })[name]) return;
+      if (!sanitizeCells({ [name]: cell })[name]) { setStatus("Não foi possível guardar este conteúdo. Confira o limite do campo e copie seu texto antes de sair."); return; }
       pending = { ...pending, [name]: cell };
       state = { ...state, [name]: cell };
       cache(); setCells(state);

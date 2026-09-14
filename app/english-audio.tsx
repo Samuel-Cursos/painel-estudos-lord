@@ -9,7 +9,7 @@ export function EnglishListen({ text, label = "Ouvir em inglês" }: { text: stri
   const [message, setMessage] = useState("");
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
-    const refresh = () => setVoices(window.speechSynthesis.getVoices().filter((voice) => /^en[-_]/i.test(voice.lang)));
+    const refresh = () => setVoices(window.speechSynthesis.getVoices().filter((voice) => /^en[-_]/i.test(voice.lang)).sort((a, b) => Number(/^en[-_]GB/i.test(b.lang)) - Number(/^en[-_]GB/i.test(a.lang))));
     refresh(); window.speechSynthesis.addEventListener("voiceschanged", refresh);
     return () => { window.speechSynthesis.removeEventListener("voiceschanged", refresh); window.speechSynthesis.cancel(); };
   }, []);
